@@ -15,7 +15,7 @@ type File struct {
 	ParentDir        string     `json:"parent_dir"`
 	Status           string     `json:"status"`
 	ModifiedAt       time.Time  `json:"modified_at"`
-	IndexedAt        time.Time  `json:"indexed_at"`
+	IndexedAt        *time.Time `json:"indexed_at"`
 	ContentIndexedAt *time.Time `json:"content_indexed_at"`
 }
 
@@ -117,4 +117,85 @@ func (s *Store) CreateFile(f *File) (*File, error) {
 func (s *Store) UpdateFileStatus(id int64, status string) error {
 	_, err := s.db.Exec(`UPDATE files SET status = ? WHERE id = ?`, status, id)
 	return err
+}
+
+func (s *Store) UpsertFile(f *File) (*File, error) {
+	existing, err := s.GetFileByPath(f.Path)
+	if err != nil {
+		return nil, err
+	}
+
+	if existing == nil {
+		return s.CreateFile(f)
+	}
+
+	if !existing.ModifiedAt.Equal(f.ModifiedAt) {
+		_, err = s.db.Exec(
+			`UPDATE files SET name = ?, extension = ?, mime_type = ?, size = ?, parent_dir = ?, status = 'active', modified_at = ?, content_indexed_at = NULL WHERE id = ?`,
+			f.Name, f.Extension, f.MimeType, f.Size, f.ParentDir, f.ModifiedAt, existing.ID,
+		)
+		if err != nil {
+			return nil, err
+		}
+	} else if existing.Status != "active" {
+		s.db.Exec(`UPDATE files SET status = 'active' WHERE id = ?`, existing.ID)
+	}
+
+	return s.GetFile(existing.ID)
+}
+
+func (s *Store) MarkMissingInDirs(parentDirs []string, seenPaths []string) error {
+	if len(parentDirs) == 0 {
+		return nil
+	}
+
+	placeholders := ""
+	args := []any{}
+	for i, dir := range parentDirs {
+		if i > 0 {
+			placeholders += ","
+		}
+		placeholders += "?"
+		args = append(args, dir)
+	}
+
+	query := `UPDATE files SET status = 'missing' WHERE parent_dir IN (` + placeholders + `) AND status = 'active'`
+
+	if len(seenPaths) > 0 {
+		notPlaceholders := ""
+		for i, p := range seenPaths {
+			if i > 0 {
+				notPlaceholders += ","
+			}
+			notPlaceholders += "?"
+			args = append(args, p)
+		}
+		query += ` AND path NOT IN (` + notPlaceholders + `)`
+	}
+
+	_, err := s.db.Exec(query, args...)
+	return err
+}
+
+func (s *Store) SetScanned(paths []string) error {
+	if len(paths) == 0 {
+		return nil
+	}
+
+	tx, err := s.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	stmt, err := tx.Prepare(`UPDATE files SET indexed_at = CURRENT_TIMESTAMP WHERE path = ? AND indexed_at IS NULL`)
+	if err != nil {
+		return err
+	}
+	defer stmt.Close()
+
+	for _, p := range paths {
+		stmt.Exec(p)
+	}
+	return tx.Commit()
 }

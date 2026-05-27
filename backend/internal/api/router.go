@@ -5,13 +5,14 @@ import (
 
 	"owl/internal/api/handler"
 	"owl/internal/api/middleware"
+	"owl/internal/scanner"
 	"owl/internal/store"
 )
 
-func NewRouter(s *store.Store) http.Handler {
+func NewRouter(s *store.Store, sc *scanner.Scanner) http.Handler {
 	mux := http.NewServeMux()
 
-	wdh := handler.NewWatchedDirHandler(s)
+	wdh := handler.NewWatchedDirHandler(s, sc)
 	fh := handler.NewFileHandler(s)
 	ch := handler.NewCommentHandler(s)
 	th := handler.NewTagHandler(s)

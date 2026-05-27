@@ -1,18 +1,21 @@
 package handler
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 
+	"owl/internal/scanner"
 	"owl/internal/store"
 )
 
 type WatchedDirHandler struct {
-	store *store.Store
+	store   *store.Store
+	scanner *scanner.Scanner
 }
 
-func NewWatchedDirHandler(s *store.Store) *WatchedDirHandler {
-	return &WatchedDirHandler{store: s}
+func NewWatchedDirHandler(s *store.Store, sc *scanner.Scanner) *WatchedDirHandler {
+	return &WatchedDirHandler{store: s, scanner: sc}
 }
 
 type createWatchedDirRequest struct {
@@ -57,6 +60,9 @@ func (h *WatchedDirHandler) Create(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
+
+	go h.scanner.Scan(context.Background(), dir.Path, dir.Recursive, dir.ID)
+
 	writeJSON(w, http.StatusCreated, dir)
 }
 
