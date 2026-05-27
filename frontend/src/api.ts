@@ -154,8 +154,8 @@ export function deleteComment(fileId: number): Promise<void> {
   return request<void>(`/files/${fileId}/comment`, { method: "DELETE" })
 }
 
-export function listTags(): Promise<Tag[]> {
-  return request<Tag[]>("/tags")
+export function listFileTags(fileId: number): Promise<Tag[]> {
+  return request<Tag[]>(`/files/${fileId}/tags`)
 }
 
 export function addFileTag(fileId: number, name: string): Promise<Tag> {
@@ -175,6 +175,7 @@ export interface VirtualFolder {
   name: string
   description: string
   auto_generated: boolean
+  source: string
   materialized: boolean
   materialized_path: string | null
   created_at: string
@@ -195,6 +196,7 @@ export interface VirtualFolderDetail {
   name: string
   description: string
   auto_generated: boolean
+  source: string
   materialized: boolean
   materialized_path: string | null
   created_at: string
@@ -274,4 +276,108 @@ export function searchFiles(query: string, scopes?: SearchScope[]): Promise<Sear
     params.set("scopes", scopes.join(","))
   }
   return request<SearchResults>(`/search?${params}`)
+}
+
+export interface TagWithCount {
+  id: number
+  name: string
+  source: string
+  file_count: number
+  created_at: string
+}
+
+export interface FolderSuggestion {
+  id: number
+  name: string
+  description: string
+  file_count: number
+  preview: string[]
+  created_at: string
+}
+
+export function tagFile(id: number): Promise<{tags: Tag[]}> {
+  return request<{tags: Tag[]}>(`/intelligence/files/${id}/tag`, { method: "POST" })
+}
+
+export function tagFiles(params?: {
+  watched_dir_id?: number
+  extension?: string
+  processing_status?: string
+  limit?: number
+}): Promise<{count: number, tagged: number, tag_count: number}> {
+  const p = new URLSearchParams()
+  if (params?.watched_dir_id) p.set("watched_dir_id", String(params.watched_dir_id))
+  if (params?.extension) p.set("extension", params.extension)
+  if (params?.processing_status) p.set("processing_status", params.processing_status)
+  if (params?.limit) p.set("limit", String(params.limit))
+  return request<{count: number, tagged: number, tag_count: number}>(`/intelligence/files/tag?${p}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(params || {}),
+  })
+}
+
+export function tagWatchedDir(id: number): Promise<{count: number, tagged: number, tag_count: number}> {
+  return request<{count: number, tagged: number, tag_count: number}>(`/intelligence/watched-directories/${id}/tag`, {
+    method: "POST",
+  })
+}
+
+export function listFolderSuggestions(): Promise<Record<string, FolderSuggestion>> {
+  return request<Record<string, FolderSuggestion>>("/intelligence/folders/suggestions")
+}
+
+export function generateFolderSuggestions(params?: {
+  name?: string
+  description?: string
+  min_files?: number
+  min_similarity?: number
+}): Promise<{created: VirtualFolder[]}> {
+  return request<{created: VirtualFolder[]}>(`/intelligence/folders/suggestions`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(params || {}),
+  })
+}
+
+export function acceptFolderSuggestion(id: number): Promise<VirtualFolder> {
+  return request<VirtualFolder>(`/intelligence/folders/suggestions/${id}/accept`, {
+    method: "POST",
+  })
+}
+
+export function dismissFolderSuggestion(id: number): Promise<void> {
+  return request<void>(`/intelligence/folders/suggestions/${id}`, {
+    method: "DELETE",
+  })
+}
+
+export function listTags(source?: "auto" | "manual"): Promise<TagWithCount[]> {
+  const p = new URLSearchParams()
+  if (source) p.set("source", source)
+  return request<TagWithCount[]>(`/intelligence/tags?${p}`)
+}
+
+export function createTag(name: string): Promise<Tag> {
+  return request<Tag>("/intelligence/tags", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ name }),
+  })
+}
+
+export function listTagFiles(id: number, params?: FileListParams): Promise<FileListResponse> {
+  return request<FileListResponse>(`/intelligence/tags/${id}/files?${buildFileParams(params)}`)
+}
+
+export function deleteTag(id: number): Promise<void> {
+  return request<void>(`/intelligence/tags/${id}`, {
+    method: "DELETE",
+  })
+}
+
+export function acceptTag(id: number): Promise<Tag> {
+  return request<Tag>(`/intelligence/tags/${id}/accept`, {
+    method: "POST",
+  })
 }

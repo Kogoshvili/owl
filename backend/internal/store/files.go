@@ -396,3 +396,47 @@ func (s *Store) ListExtensions() ([]string, error) {
 	}
 	return exts, rows.Err()
 }
+
+func (s *Store) ListFilesByTag(tagID int64, filter FileFilter) (int, []File, error) {
+	where, args := s.buildFileWhere(filter)
+
+	query := `SELECT ` + fileColumns + ` FROM files f JOIN file_tags ft ON f.id = ft.file_id WHERE ft.tag_id = ?`
+	args = append([]any{tagID}, args...)
+
+	if where != "" {
+		query += " AND " + where
+	}
+
+	query += " ORDER BY " + buildOrderBy(filter.SortBy, filter.SortOrder)
+
+	if filter.Limit > 0 {
+		query += " LIMIT ? OFFSET ?"
+		args = append(args, filter.Limit, filter.Offset)
+	}
+
+	var total int
+	countQuery := `SELECT COUNT(*) FROM files f JOIN file_tags ft ON f.id = ft.file_id WHERE ft.tag_id = ?`
+	if where != "" {
+		countQuery += " AND " + where
+	}
+	countArgs := append([]any{tagID}, args[1:len(args)-2]...)
+	if err := s.db.QueryRow(countQuery, countArgs...).Scan(&total); err != nil {
+		return 0, nil, err
+	}
+
+	rows, err := s.db.Query(query, args...)
+	if err != nil {
+		return 0, nil, err
+	}
+	defer rows.Close()
+
+	var files []File
+	for rows.Next() {
+		var f File
+		if err := scanFile(rows, &f); err != nil {
+			return 0, nil, err
+		}
+		files = append(files, f)
+	}
+	return total, files, rows.Err()
+}

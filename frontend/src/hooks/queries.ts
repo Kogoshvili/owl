@@ -15,6 +15,7 @@ import {
   addFileTag,
   removeFileTag,
   listTags,
+  listFileTags,
   getFileExtensions,
   getVirtualFolders,
   getVirtualFolderDetail,
@@ -23,6 +24,17 @@ import {
   deleteVirtualFolder,
   addFilesToFolder,
   removeFileFromFolder,
+  tagFile,
+  tagFiles,
+  tagWatchedDir,
+  listFolderSuggestions,
+  generateFolderSuggestions,
+  acceptFolderSuggestion,
+  dismissFolderSuggestion,
+  createTag,
+  listTagFiles,
+  deleteTag,
+  acceptTag,
   type SearchScope,
 } from "../api"
 import type { FilterState } from "../components/file-list"
@@ -167,10 +179,17 @@ export function useDeleteComment() {
   })
 }
 
-export function useTags() {
+export function useTags(source?: "auto" | "manual") {
   return useQuery({
-    queryKey: ["tags"],
-    queryFn: listTags,
+    queryKey: ["tags", source],
+    queryFn: () => listTags(source),
+  })
+}
+
+export function useFileTags(fileId: number) {
+  return useQuery({
+    queryKey: ["fileTags", fileId],
+    queryFn: () => listFileTags(fileId),
   })
 }
 
@@ -261,5 +280,118 @@ export function useRemoveFileFromFolder() {
     onSuccess: (_data, vars) => {
       qc.invalidateQueries({ queryKey: ["virtualFolder", vars.folderId] })
     },
+  })
+}
+
+export function useTagFile() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (id: number) => tagFile(id),
+    onSuccess: (_data, id) => {
+      qc.invalidateQueries({ queryKey: ["file", id] })
+      qc.invalidateQueries({ queryKey: ["tags"] })
+    },
+  })
+}
+
+export function useTagFiles() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (params?: Parameters<typeof tagFiles>[0]) => tagFiles(params),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["tags"] })
+      qc.invalidateQueries({ queryKey: ["files"] })
+    },
+  })
+}
+
+export function useTagWatchedDir() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (id: number) => tagWatchedDir(id),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["tags"] })
+      qc.invalidateQueries({ queryKey: ["files"] })
+    },
+  })
+}
+
+export function useFolderSuggestions() {
+  return useQuery({
+    queryKey: ["folderSuggestions"],
+    queryFn: listFolderSuggestions,
+  })
+}
+
+export function useGenerateFolderSuggestions() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (params?: Parameters<typeof generateFolderSuggestions>[0]) =>
+      generateFolderSuggestions(params),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["folderSuggestions"] })
+      qc.invalidateQueries({ queryKey: ["virtualFolders"] })
+    },
+  })
+}
+
+export function useAcceptFolderSuggestion() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (id: number) => acceptFolderSuggestion(id),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["folderSuggestions"] })
+      qc.invalidateQueries({ queryKey: ["virtualFolders"] })
+    },
+  })
+}
+
+export function useDismissFolderSuggestion() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (id: number) => dismissFolderSuggestion(id),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["folderSuggestions"] })
+    },
+  })
+}
+
+export function useCreateTag() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (name: string) => createTag(name),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["tags"] }),
+  })
+}
+
+export function useTagFilesList(id: number, filters?: FilterState) {
+  const limit = filters?.limit ?? 50
+  const offset = (filters?.page ?? 1) > 1 ? ((filters?.page ?? 1) - 1) * limit : 0
+  return useQuery({
+    queryKey: ["tagFiles", id, filters],
+    queryFn: () => listTagFiles(id, {
+      extension: filters?.extension,
+      processing_status: filters?.processing_status,
+      sort: filters?.sort,
+      order: filters?.order,
+      limit,
+      offset,
+    }),
+  })
+}
+
+export function useDeleteTag() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (id: number) => deleteTag(id),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["tags"] }),
+  })
+}
+
+export function useAcceptTag() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (id: number) => acceptTag(id),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["tags"] }),
   })
 }

@@ -121,7 +121,7 @@ export function VirtualFolders({ folders, loading, createMutation, updateMutatio
               <>
                 <div class="folder-card-header">
                   <span class="folder-name">{f.name}</span>
-                  {f.auto_generated && <span class="badge badge-auto">auto</span>}
+                  <span class={`badge ${f.source === "auto" ? "badge-auto" : "badge-manual"}`}>{f.source}</span>
                   {f.materialized && <span class="badge badge-materialized">materialized</span>}
                 </div>
                 {f.description && <div class="folder-desc">{f.description}</div>}

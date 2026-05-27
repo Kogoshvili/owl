@@ -20,6 +20,7 @@ func NewRouter(s *store.Store, sc *scanner.Scanner, ext *extractor.Extractor) ht
 	vfh := handler.NewVirtualFolderHandler(s)
 	nh := handler.NewNoteHandler(s)
 	sh := handler.NewSearchHandler(s)
+	ih := handler.NewIntelligenceHandler(s)
 
 	mux.HandleFunc("GET /health", handleHealth)
 
@@ -63,6 +64,19 @@ func NewRouter(s *store.Store, sc *scanner.Scanner, ext *extractor.Extractor) ht
 	mux.HandleFunc("POST /notes/{id}/materialize", nh.Materialize)
 
 	mux.HandleFunc("GET /search", sh.Search)
+
+	mux.HandleFunc("POST /intelligence/files/{id}/tag", ih.TagFile)
+	mux.HandleFunc("POST /intelligence/files/tag", ih.TagFiles)
+	mux.HandleFunc("POST /intelligence/watched-directories/{id}/tag", ih.TagWatchedDir)
+	mux.HandleFunc("GET /intelligence/folders/suggestions", ih.ListFolderSuggestions)
+	mux.HandleFunc("POST /intelligence/folders/suggestions", ih.GenerateSuggestions)
+	mux.HandleFunc("POST /intelligence/folders/suggestions/{id}/accept", ih.AcceptFolderSuggestion)
+	mux.HandleFunc("DELETE /intelligence/folders/suggestions/{id}", ih.DismissFolderSuggestion)
+	mux.HandleFunc("GET /intelligence/tags", ih.ListTags)
+	mux.HandleFunc("POST /intelligence/tags", ih.CreateTag)
+	mux.HandleFunc("GET /intelligence/tags/{id}/files", ih.ListTagFiles)
+	mux.HandleFunc("DELETE /intelligence/tags/{id}", ih.DeleteTag)
+	mux.HandleFunc("POST /intelligence/tags/{id}/accept", ih.AcceptTag)
 
 	return middleware.Logging(middleware.CORS(mux))
 }

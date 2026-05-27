@@ -40,6 +40,17 @@ function FolderHeader({ folder, updateMutation, deleteMutation }: {
     }
   }
 
+  const handleDismiss = async () => {
+    try {
+      await deleteMutation.mutateAsync(folder.id)
+      route("/virtual-folders")
+    } catch (e: any) {
+      setError(e.message)
+    }
+  }
+
+  const isAuto = folder.source === "auto"
+
   if (editing) {
     return (
       <div class="folder-detail-header editing">
@@ -58,13 +69,22 @@ function FolderHeader({ folder, updateMutation, deleteMutation }: {
     <div class="folder-detail-header">
       <div class="folder-detail-title-row">
         <h2>{folder.name}</h2>
-        {folder.auto_generated && <span class="badge badge-auto">auto</span>}
+        <span class={`badge ${isAuto ? "badge-auto" : "badge-manual"}`}>{folder.source}</span>
         {folder.materialized && <span class="badge badge-materialized">materialized</span>}
       </div>
       {folder.description && <p class="folder-detail-desc">{folder.description}</p>}
       <div class="folder-header-actions">
         <button class="btn btn-sm" onClick={() => setEditing(true)}>Edit</button>
-        <button class="btn btn-sm btn-danger" onClick={handleDelete} disabled={deleteMutation.isPending}>Delete</button>
+        {isAuto && (
+          <button class="btn btn-sm btn-danger" onClick={handleDismiss} disabled={deleteMutation.isPending}>
+            Dismiss
+          </button>
+        )}
+        {!isAuto && (
+          <button class="btn btn-sm btn-danger" onClick={handleDelete} disabled={deleteMutation.isPending}>
+            Delete
+          </button>
+        )}
       </div>
     </div>
   )

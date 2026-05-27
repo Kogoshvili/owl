@@ -6,6 +6,8 @@ import { SearchPage } from "./pages/search"
 import { FileDetailPage } from "./pages/file-detail"
 import { VirtualFoldersPage } from "./pages/virtual-folders"
 import { VirtualFolderDetailPage } from "./pages/virtual-folder-detail"
+import { TagsPage } from "./pages/tags"
+import { TagDetailPage } from "./pages/tag-detail"
 import "./app.css"
 
 function NavLink({ href, children }: { href: string; children: string }) {
@@ -30,7 +32,8 @@ export function App() {
             <NavLink href="/">Ingest</NavLink>
             <NavLink href="/files">Files</NavLink>
             <NavLink href="/search">Search</NavLink>
-            <NavLink href="/virtual-folders">Virtual Folders</NavLink>
+            <NavLink href="/virtual-folders">Folders</NavLink>
+            <NavLink href="/tags">Tags</NavLink>
           </nav>
         </div>
       </header>
@@ -42,6 +45,8 @@ export function App() {
           <Route path="/search" component={SearchPage} />
           <Route path="/virtual-folders" component={VirtualFoldersPage} />
           <Route path="/virtual-folders/:id" component={VirtualFolderDetailPage} />
+          <Route path="/tags" component={TagsPage} />
+          <Route path="/tags/:id" component={TagDetailPage} />
         </Router>
       </main>
     </div>

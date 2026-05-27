@@ -12,6 +12,14 @@ type Tag struct {
 	CreatedAt time.Time `json:"created_at"`
 }
 
+type TagWithCount struct {
+	ID        int64     `json:"id"`
+	Name      string    `json:"name"`
+	Source    string    `json:"source"`
+	FileCount int64     `json:"file_count"`
+	CreatedAt time.Time `json:"created_at"`
+}
+
 type FileTag struct {
 	FileID int64  `json:"file_id"`
 	TagID  int64  `json:"tag_id"`
@@ -22,6 +30,42 @@ type NoteTag struct {
 	NoteID int64  `json:"note_id"`
 	TagID  int64  `json:"tag_id"`
 	Source string `json:"source"`
+}
+
+func (s *Store) UpdateTagSource(id int64, source string) (*Tag, error) {
+	_, err := s.db.Exec(`UPDATE tags SET source = ? WHERE id = ?`, source, id)
+	if err != nil {
+		return nil, err
+	}
+	return s.GetTag(id)
+}
+
+func (s *Store) ListTagsWithCount(source *string) ([]TagWithCount, error) {
+	var query string
+	var args []any
+
+	if source != nil {
+		query = `SELECT t.id, t.name, t.source, COUNT(ft.file_id) as file_count, t.created_at FROM tags t LEFT JOIN file_tags ft ON t.id = ft.tag_id WHERE t.source = ? GROUP BY t.id ORDER BY file_count DESC`
+		args = []any{*source}
+	} else {
+		query = `SELECT t.id, t.name, t.source, COUNT(ft.file_id) as file_count, t.created_at FROM tags t LEFT JOIN file_tags ft ON t.id = ft.tag_id GROUP BY t.id ORDER BY file_count DESC`
+	}
+
+	rows, err := s.db.Query(query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var tags []TagWithCount
+	for rows.Next() {
+		var t TagWithCount
+		if err := rows.Scan(&t.ID, &t.Name, &t.Source, &t.FileCount, &t.CreatedAt); err != nil {
+			return nil, err
+		}
+		tags = append(tags, t)
+	}
+	return tags, rows.Err()
 }
 
 func (s *Store) ListTags() ([]Tag, error) {
@@ -90,6 +134,12 @@ func (s *Store) DeleteTag(id int64) error {
 func (s *Store) AddFileTag(fileID, tagID int64, source string) error {
 	_, err := s.db.Exec(`INSERT OR IGNORE INTO file_tags (file_id, tag_id, source) VALUES (?, ?, ?)`, fileID, tagID, source)
 	return err
+}
+
+func (s *Store) CountFilesByTag(tagID int64) (int, error) {
+	var count int
+	err := s.db.QueryRow(`SELECT COUNT(*) FROM file_tags WHERE tag_id = ?`, tagID).Scan(&count)
+	return count, err
 }
 
 func (s *Store) RemoveFileTag(fileID, tagID int64) error {

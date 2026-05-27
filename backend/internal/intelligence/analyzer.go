@@ -1,0 +1,295 @@
+package intelligence
+
+import (
+	"database/sql"
+	"math"
+	"regexp"
+	"strings"
+	"unicode"
+)
+
+type Keyword struct {
+	Term  string
+	Score float64
+}
+
+type FileKeywords struct {
+	FileID   int64
+	Keywords []Keyword
+}
+
+var stopwords = map[string]bool{
+	"the": true, "and": true, "or": true, "but": true, "if": true,
+	"then": true, "else": true, "of": true, "at": true,
+	"by": true, "for": true, "with": true, "about": true, "is": true,
+	"am": true, "are": true, "was": true, "were": true, "be": true,
+	"been": true, "being": true, "have": true, "has": true, "had": true,
+	"do": true, "does": true, "did": true, "can": true, "could": true,
+	"will": true, "would": true, "shall": true, "should": true,
+	"may": true, "might": true, "must": true, "this": true, "that": true,
+	"these": true, "those": true, "a": true, "an": true, "as": true,
+	"in": true, "on": true, "to": true, "from": true, "into": true,
+	"through": true, "i": true, "you": true, "he": true, "she": true,
+	"it": true, "we": true, "they": true, "my": true, "your": true,
+	"his": true, "her": true, "its": true, "our": true, "their": true,
+	"what": true, "which": true, "who": true, "whom": true, "whose": true,
+	"where": true, "why": true, "how": true,
+	// Numbers as strings
+	"0": true, "1": true, "2": true, "3": true, "4": true,
+	"5": true, "6": true, "7": true, "8": true, "9": true,
+	"10": true, "11": true, "12": true, "13": true, "14": true,
+	"15": true, "16": true, "17": true, "18": true, "19": true,
+	"20": true, "30": true, "40": true, "50": true,
+	"100": true, "1000": true,
+}
+
+var wordRegex = regexp.MustCompile(`[a-zA-Z0-9]+`)
+
+func Tokenize(text string) []string {
+	matches := wordRegex.FindAllString(text, -1)
+	return matches
+}
+
+func NormalizeTerm(term string) string {
+	return strings.ToLower(strings.TrimSpace(term))
+}
+
+func IsStopword(term string) bool {
+	return stopwords[term]
+}
+
+func IsNumeric(term string) bool {
+	for _, r := range term {
+		if !unicode.IsDigit(r) {
+			return false
+		}
+	}
+	return len(term) > 0
+}
+
+func ExtractKeywordsFromContent(content string, topN int) []Keyword {
+	tokens := Tokenize(content)
+	termFreq := make(map[string]int)
+
+	for _, token := range tokens {
+		term := NormalizeTerm(token)
+		if len(term) < 3 {
+			continue
+		}
+		if IsStopword(term) {
+			continue
+		}
+		if IsNumeric(term) {
+			continue
+		}
+		termFreq[term]++
+	}
+
+	keywords := make([]Keyword, 0, len(termFreq))
+	for term, freq := range termFreq {
+		keywords = append(keywords, Keyword{
+			Term:  term,
+			Score: float64(freq),
+		})
+	}
+
+	return topKeywords(keywords, topN)
+}
+
+func topKeywords(keywords []Keyword, n int) []Keyword {
+	if n <= 0 {
+		return keywords
+	}
+	if len(keywords) <= n {
+		return keywords
+	}
+
+	for i := 0; i < n; i++ {
+		maxIdx := i
+		for j := i + 1; j < len(keywords); j++ {
+			if keywords[j].Score > keywords[maxIdx].Score {
+				maxIdx = j
+			}
+		}
+		keywords[i], keywords[maxIdx] = keywords[maxIdx], keywords[i]
+	}
+
+	return keywords[:n]
+}
+
+type Analyzer struct {
+	db *sql.DB
+}
+
+func NewAnalyzer(db *sql.DB) *Analyzer {
+	return &Analyzer{db: db}
+}
+
+func (a *Analyzer) GetFileKeywords(fileID int64, topN int) ([]Keyword, error) {
+	var content sql.NullString
+	err := a.db.QueryRow(`SELECT content FROM files_fts WHERE file_id = ?`, fileID).Scan(&content)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return []Keyword{}, nil
+		}
+		return nil, err
+	}
+
+	if !content.Valid || content.String == "" {
+		return []Keyword{}, nil
+	}
+
+	return ExtractKeywordsFromContent(content.String, topN), nil
+}
+
+func (a *Analyzer) BuildCorpusTFIDF(fileIDs []int64) (map[int64][]Keyword, error) {
+	result := make(map[int64][]Keyword)
+	termDocFreq := make(map[string]int)
+
+	fileKeywordsMap := make(map[int64]map[string]int)
+
+	for _, fileID := range fileIDs {
+		keywords, err := a.GetFileKeywords(fileID, 100)
+		if err != nil {
+			return nil, err
+		}
+
+		keywordMap := make(map[string]int)
+		for _, kw := range keywords {
+			keywordMap[kw.Term] = int(kw.Score)
+			termDocFreq[kw.Term]++
+		}
+
+		fileKeywordsMap[fileID] = keywordMap
+	}
+
+	totalDocs := len(fileIDs)
+
+	for _, fileID := range fileIDs {
+		keywordMap := fileKeywordsMap[fileID]
+		keywords := make([]Keyword, 0, len(keywordMap))
+
+		for term, freq := range keywordMap {
+			docFreq := termDocFreq[term]
+			idf := math.Log(float64(totalDocs) / float64(docFreq))
+			tfidf := float64(freq) * idf
+
+			keywords = append(keywords, Keyword{
+				Term:  term,
+				Score: tfidf,
+			})
+		}
+
+		result[fileID] = topKeywords(keywords, 20)
+	}
+
+	return result, nil
+}
+
+func (a *Analyzer) CalculateFileSimilarity(id1, id2 int64) (float64, error) {
+	keywords1, err := a.GetFileKeywords(id1, 50)
+	if err != nil {
+		return 0, err
+	}
+
+	keywords2, err := a.GetFileKeywords(id2, 50)
+	if err != nil {
+		return 0, err
+	}
+
+	terms1 := make(map[string]float64)
+	for _, kw := range keywords1 {
+		terms1[kw.Term] = kw.Score
+	}
+
+	terms2 := make(map[string]float64)
+	for _, kw := range keywords2 {
+		terms2[kw.Term] = kw.Score
+	}
+
+	if len(terms1) == 0 || len(terms2) == 0 {
+		return 0, nil
+	}
+
+	dotProduct := 0.0
+	norm1 := 0.0
+	norm2 := 0.0
+
+	for term, score1 := range terms1 {
+		score2, exists := terms2[term]
+		if exists {
+			dotProduct += score1 * score2
+		}
+		norm1 += score1 * score1
+	}
+
+	for _, score2 := range terms2 {
+		norm2 += score2 * score2
+	}
+
+	if norm1 == 0 || norm2 == 0 {
+		return 0, nil
+	}
+
+	return dotProduct / (math.Sqrt(norm1) * math.Sqrt(norm2)), nil
+}
+
+func (a *Analyzer) GetProcessedFiles(limit int) ([]int64, error) {
+	if limit <= 0 {
+		limit = 1000
+	}
+
+	rows, err := a.db.Query(`
+		SELECT id FROM files 
+		WHERE processing_status = 'processed' 
+		ORDER BY id 
+		LIMIT ?
+	`, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var fileIDs []int64
+	for rows.Next() {
+		var id int64
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		fileIDs = append(fileIDs, id)
+	}
+
+	return fileIDs, rows.Err()
+}
+
+func (a *Analyzer) GetFileNames(fileIDs []int64) (map[int64]string, error) {
+	if len(fileIDs) == 0 {
+		return make(map[int64]string), nil
+	}
+
+	placeholders := make([]string, len(fileIDs))
+	args := make([]any, len(fileIDs))
+	for i, id := range fileIDs {
+		placeholders[i] = "?"
+		args[i] = id
+	}
+
+	query := `SELECT id, name FROM files WHERE id IN (` + strings.Join(placeholders, ",") + `)`
+	rows, err := a.db.Query(query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	result := make(map[int64]string)
+	for rows.Next() {
+		var id int64
+		var name string
+		if err := rows.Scan(&id, &name); err != nil {
+			return nil, err
+		}
+		result[id] = name
+	}
+
+	return result, rows.Err()
+}
