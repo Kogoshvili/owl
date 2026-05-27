@@ -1,5 +1,5 @@
 import { useState } from "preact/hooks"
-import { useWatchedDirs, useAllFiles, useFilesByDir, useAddWatchedDir, useScanDir, useDeleteDir } from "../hooks/queries"
+import { useWatchedDirs, useAllFiles, useFilesByDir, useAddWatchedDir, useScanDir, useDeleteDir, useExtractDir } from "../hooks/queries"
 import { WatchedDirs } from "../components/watched-dirs"
 import { FileList } from "../components/file-list"
 
@@ -14,6 +14,7 @@ export function DashboardPage() {
   const addMutation = useAddWatchedDir()
   const scanMutation = useScanDir()
   const deleteMutation = useDeleteDir()
+  const extractMutation = useExtractDir()
 
   const dirs = dirsQuery.data ?? []
   const files = selectedDirId !== null
@@ -41,6 +42,7 @@ export function DashboardPage() {
           addMutation={addMutation}
           scanMutation={scanMutation}
           deleteMutation={deleteMutation}
+          extractMutation={extractMutation}
           onSelect={handleSelect}
         />
       </aside>

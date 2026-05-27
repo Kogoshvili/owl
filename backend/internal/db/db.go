@@ -20,6 +20,17 @@ func Init(path string) (*sql.DB, error) {
 		return nil, fmt.Errorf("open database: %w", err)
 	}
 
+	database.SetMaxOpenConns(1)
+
+	if _, err := database.Exec("PRAGMA journal_mode=WAL"); err != nil {
+		database.Close()
+		return nil, fmt.Errorf("set WAL mode: %w", err)
+	}
+	if _, err := database.Exec("PRAGMA busy_timeout=5000"); err != nil {
+		database.Close()
+		return nil, fmt.Errorf("set busy timeout: %w", err)
+	}
+
 	if err := runMigrations(database); err != nil {
 		database.Close()
 		return nil, fmt.Errorf("run migrations: %w", err)

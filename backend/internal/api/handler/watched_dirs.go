@@ -5,17 +5,19 @@ import (
 	"encoding/json"
 	"net/http"
 
+	"owl/internal/extractor"
 	"owl/internal/scanner"
 	"owl/internal/store"
 )
 
 type WatchedDirHandler struct {
-	store   *store.Store
-	scanner *scanner.Scanner
+	store     *store.Store
+	scanner   *scanner.Scanner
+	extractor *extractor.Extractor
 }
 
-func NewWatchedDirHandler(s *store.Store, sc *scanner.Scanner) *WatchedDirHandler {
-	return &WatchedDirHandler{store: s, scanner: sc}
+func NewWatchedDirHandler(s *store.Store, sc *scanner.Scanner, ext *extractor.Extractor) *WatchedDirHandler {
+	return &WatchedDirHandler{store: s, scanner: sc, extractor: ext}
 }
 
 type createWatchedDirRequest struct {
@@ -122,4 +124,33 @@ func (h *WatchedDirHandler) Scan(w http.ResponseWriter, r *http.Request) {
 	go h.scanner.Scan(context.Background(), dir.Path, dir.Recursive, dir.ID)
 
 	writeJSON(w, http.StatusAccepted, dir)
+}
+
+func (h *WatchedDirHandler) Extract(w http.ResponseWriter, r *http.Request) {
+	id, ok := parsePathID(w, r, "id")
+	if !ok {
+		return
+	}
+
+	dir, err := h.store.GetWatchedDir(id)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	if dir == nil {
+		writeError(w, http.StatusNotFound, "watched directory not found")
+		return
+	}
+
+	queued, err := h.store.QueueFilesForExtraction(id)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	if queued > 0 {
+		go h.extractor.ProcessAll(context.Background())
+	}
+
+	writeJSON(w, http.StatusAccepted, map[string]int64{"queued": queued})
 }

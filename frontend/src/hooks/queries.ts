@@ -6,6 +6,16 @@ import {
   addWatchedDir,
   scanDir,
   deleteDir,
+  extractDir,
+  extractFile,
+  searchFiles,
+  getFileDetail,
+  upsertComment,
+  deleteComment,
+  addFileTag,
+  removeFileTag,
+  listTags,
+  type SearchScope,
 } from "../api"
 
 export function useWatchedDirs() {
@@ -59,6 +69,94 @@ export function useDeleteDir() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["watchedDirs"] })
       qc.invalidateQueries({ queryKey: ["files"] })
+    },
+  })
+}
+
+export function useExtractDir() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (id: number) => extractDir(id),
+    onSuccess: (_data, id) => {
+      qc.invalidateQueries({ queryKey: ["watchedDirs"] })
+      qc.invalidateQueries({ queryKey: ["files"] })
+      qc.invalidateQueries({ queryKey: ["files", "dir", id] })
+    },
+  })
+}
+
+export function useExtractFile() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (id: number) => extractFile(id),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["files"] })
+    },
+  })
+}
+
+export function useSearch(query: string, scopes?: SearchScope[]) {
+  return useQuery({
+    queryKey: ["search", query, scopes],
+    queryFn: () => searchFiles(query, scopes),
+    enabled: query.length >= 2,
+  })
+}
+
+export function useFileDetail(id: number) {
+  return useQuery({
+    queryKey: ["file", id],
+    queryFn: () => getFileDetail(id),
+  })
+}
+
+export function useUpsertComment() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ fileId, content }: { fileId: number; content: string }) =>
+      upsertComment(fileId, content),
+    onSuccess: (_data, vars) => {
+      qc.invalidateQueries({ queryKey: ["file", vars.fileId] })
+    },
+  })
+}
+
+export function useDeleteComment() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (fileId: number) => deleteComment(fileId),
+    onSuccess: (_data, fileId) => {
+      qc.invalidateQueries({ queryKey: ["file", fileId] })
+    },
+  })
+}
+
+export function useTags() {
+  return useQuery({
+    queryKey: ["tags"],
+    queryFn: listTags,
+  })
+}
+
+export function useAddFileTag() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ fileId, name }: { fileId: number; name: string }) =>
+      addFileTag(fileId, name),
+    onSuccess: (_data, vars) => {
+      qc.invalidateQueries({ queryKey: ["file", vars.fileId] })
+      qc.invalidateQueries({ queryKey: ["tags"] })
+    },
+  })
+}
+
+export function useRemoveFileTag() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ fileId, tagId }: { fileId: number; tagId: number }) =>
+      removeFileTag(fileId, tagId),
+    onSuccess: (_data, vars) => {
+      qc.invalidateQueries({ queryKey: ["file", vars.fileId] })
     },
   })
 }

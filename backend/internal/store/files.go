@@ -2,38 +2,52 @@ package store
 
 import (
 	"database/sql"
+	"encoding/json"
+	"log"
 	"time"
 )
 
 type File struct {
-	ID               int64      `json:"id"`
-	Path             string     `json:"path"`
-	Name             string     `json:"name"`
-	Extension        string     `json:"extension"`
-	MimeType         string     `json:"mime_type"`
-	Size             int64      `json:"size"`
-	ParentDir        string     `json:"parent_dir"`
-	WatchedDirID     *int64     `json:"watched_dir_id"`
-	Status           string     `json:"status"`
-	ModifiedAt       time.Time  `json:"modified_at"`
-	IndexedAt        *time.Time `json:"indexed_at"`
-	ContentIndexedAt *time.Time `json:"content_indexed_at"`
+	ID               int64             `json:"id"`
+	Path             string            `json:"path"`
+	Name             string            `json:"name"`
+	Extension        string            `json:"extension"`
+	MimeType         string            `json:"mime_type"`
+	Size             int64             `json:"size"`
+	ParentDir        string            `json:"parent_dir"`
+	WatchedDirID     *int64            `json:"watched_dir_id"`
+	Status           string            `json:"status"`
+	ModifiedAt       time.Time         `json:"modified_at"`
+	IndexedAt        *time.Time        `json:"indexed_at"`
+	ContentIndexedAt *time.Time        `json:"content_indexed_at"`
+	ProcessingStatus string            `json:"processing_status"`
+	ProcessingError  *string           `json:"processing_error"`
+	FileMetadata     map[string]any    `json:"file_metadata"`
 }
 
-const fileColumns = `id, path, name, extension, mime_type, size, parent_dir, watched_dir_id, status, modified_at, indexed_at, content_indexed_at`
+const fileColumns = `id, path, name, extension, mime_type, size, parent_dir, watched_dir_id, status, modified_at, indexed_at, content_indexed_at, processing_status, processing_error, file_metadata`
 
 func scanFile(scanner interface{ Scan(...any) error }, f *File) error {
-	return scanner.Scan(&f.ID, &f.Path, &f.Name, &f.Extension, &f.MimeType, &f.Size, &f.ParentDir, &f.WatchedDirID, &f.Status, &f.ModifiedAt, &f.IndexedAt, &f.ContentIndexedAt)
+	var metadataJSON sql.NullString
+	err := scanner.Scan(&f.ID, &f.Path, &f.Name, &f.Extension, &f.MimeType, &f.Size, &f.ParentDir, &f.WatchedDirID, &f.Status, &f.ModifiedAt, &f.IndexedAt, &f.ContentIndexedAt, &f.ProcessingStatus, &f.ProcessingError, &metadataJSON)
+	if err != nil {
+		return err
+	}
+	if metadataJSON.Valid && metadataJSON.String != "" {
+		json.Unmarshal([]byte(metadataJSON.String), &f.FileMetadata)
+	}
+	return nil
 }
 
 type FileFilter struct {
-	Extension    *string
-	Status       *string
-	TagID        *int64
-	ParentDir    *string
-	WatchedDirID *int64
-	Limit        int
-	Offset       int
+	Extension        *string
+	Status           *string
+	TagID            *int64
+	ParentDir        *string
+	WatchedDirID     *int64
+	ProcessingStatus *string
+	Limit            int
+	Offset           int
 }
 
 func (s *Store) ListFiles(f FileFilter) ([]File, error) {
@@ -60,6 +74,10 @@ func (s *Store) ListFiles(f FileFilter) ([]File, error) {
 	if f.WatchedDirID != nil {
 		conditions = append(conditions, "watched_dir_id = ?")
 		args = append(args, *f.WatchedDirID)
+	}
+	if f.ProcessingStatus != nil {
+		conditions = append(conditions, "processing_status = ?")
+		args = append(args, *f.ProcessingStatus)
 	}
 
 	if len(conditions) > 0 {
@@ -96,24 +114,26 @@ func (s *Store) ListFiles(f FileFilter) ([]File, error) {
 
 func (s *Store) GetFile(id int64) (*File, error) {
 	var f File
-	err := s.db.QueryRow(`SELECT `+fileColumns+` FROM files WHERE id = ?`, id).Scan(
-		&f.ID, &f.Path, &f.Name, &f.Extension, &f.MimeType, &f.Size, &f.ParentDir, &f.WatchedDirID, &f.Status, &f.ModifiedAt, &f.IndexedAt, &f.ContentIndexedAt,
-	)
+	err := scanFile(s.db.QueryRow(`SELECT `+fileColumns+` FROM files WHERE id = ?`, id), &f)
 	if err == sql.ErrNoRows {
 		return nil, nil
 	}
-	return &f, err
+	if err != nil {
+		return nil, err
+	}
+	return &f, nil
 }
 
 func (s *Store) GetFileByPath(path string) (*File, error) {
 	var f File
-	err := s.db.QueryRow(`SELECT `+fileColumns+` FROM files WHERE path = ?`, path).Scan(
-		&f.ID, &f.Path, &f.Name, &f.Extension, &f.MimeType, &f.Size, &f.ParentDir, &f.WatchedDirID, &f.Status, &f.ModifiedAt, &f.IndexedAt, &f.ContentIndexedAt,
-	)
+	err := scanFile(s.db.QueryRow(`SELECT `+fileColumns+` FROM files WHERE path = ?`, path), &f)
 	if err == sql.ErrNoRows {
 		return nil, nil
 	}
-	return &f, err
+	if err != nil {
+		return nil, err
+	}
+	return &f, nil
 }
 
 func (s *Store) CreateFile(f *File) (*File, error) {
@@ -145,7 +165,7 @@ func (s *Store) UpsertFile(f *File) (*File, error) {
 
 	if !existing.ModifiedAt.Equal(f.ModifiedAt) {
 		_, err = s.db.Exec(
-			`UPDATE files SET name = ?, extension = ?, mime_type = ?, size = ?, parent_dir = ?, watched_dir_id = ?, status = 'active', modified_at = ?, content_indexed_at = NULL WHERE id = ?`,
+			`UPDATE files SET name = ?, extension = ?, mime_type = ?, size = ?, parent_dir = ?, watched_dir_id = ?, status = 'active', modified_at = ?, processing_status = 'stale', processing_error = NULL, content_indexed_at = NULL WHERE id = ?`,
 			f.Name, f.Extension, f.MimeType, f.Size, f.ParentDir, f.WatchedDirID, f.ModifiedAt, existing.ID,
 		)
 		if err != nil {
@@ -250,4 +270,94 @@ func (s *Store) SetScanned(paths []string) error {
 		stmt.Exec(p)
 	}
 	return tx.Commit()
+}
+
+func (s *Store) QueueFilesForExtraction(dirID int64) (int64, error) {
+	result, err := s.db.Exec(
+		`UPDATE files SET processing_status = 'queued', processing_error = NULL WHERE watched_dir_id = ? AND processing_status IN ('unprocessed', 'stale', 'failed') AND LOWER(extension) IN ('.txt','.md','.log','.csv','.json','.xml','.yaml','.yml','.toml','.ini','.cfg','.conf','.sh','.bat','.ps1','.py','.js','.ts','.go','.rs','.java','.c','.cpp','.h','.hpp','.rb','.php','.sql','.env','.gitignore','.html','.htm','.svg','.css','.scss','.pdf','.docx','.xlsx','.pptx')`,
+		dirID,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
+func (s *Store) QueueFileForExtraction(fileID int64) error {
+	result, err := s.db.Exec(
+		`UPDATE files SET processing_status = 'queued', processing_error = NULL WHERE id = ? AND processing_status IN ('unprocessed', 'stale', 'failed') AND LOWER(extension) IN ('.txt','.md','.log','.csv','.json','.xml','.yaml','.yml','.toml','.ini','.cfg','.conf','.sh','.bat','.ps1','.py','.js','.ts','.go','.rs','.java','.c','.cpp','.h','.hpp','.rb','.php','.sql','.env','.gitignore','.html','.htm','.svg','.css','.scss','.pdf','.docx','.xlsx','.pptx')`,
+		fileID,
+	)
+	if err != nil {
+		return err
+	}
+	n, _ := result.RowsAffected()
+	if n == 0 {
+		return sql.ErrNoRows
+	}
+	return nil
+}
+
+func (s *Store) GetNextQueuedFile() (*File, error) {
+	var f File
+	err := scanFile(s.db.QueryRow(`SELECT `+fileColumns+` FROM files WHERE processing_status = 'queued' ORDER BY size ASC LIMIT 1`), &f)
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &f, nil
+}
+
+func (s *Store) SetFileProcessing(fileID int64) error {
+	_, err := s.db.Exec(`UPDATE files SET processing_status = 'processing' WHERE id = ?`, fileID)
+	return err
+}
+
+func (s *Store) SetFileProcessed(fileID int64) error {
+	_, err := s.db.Exec(
+		`UPDATE files SET processing_status = 'processed', content_indexed_at = CURRENT_TIMESTAMP, processing_error = NULL WHERE id = ?`,
+		fileID,
+	)
+	return err
+}
+
+func (s *Store) SetFileFailed(fileID int64, errMsg string) error {
+	_, err := s.db.Exec(
+		`UPDATE files SET processing_status = 'failed', processing_error = ? WHERE id = ?`,
+		errMsg, fileID,
+	)
+	return err
+}
+
+func (s *Store) RecoverStuckFiles() {
+	result, err := s.db.Exec(
+		`UPDATE files SET processing_status = 'failed', processing_error = 'Interrupted: server restarted while processing' WHERE processing_status IN ('queued', 'processing')`,
+	)
+	if err != nil {
+		return
+	}
+	n, _ := result.RowsAffected()
+	if n > 0 {
+		log.Printf("recovered %d stuck files (queued/processing → failed)", n)
+	}
+}
+
+func (s *Store) SetFileMetadata(fileID int64, metadata map[string]any) error {
+	jsonBytes, err := json.Marshal(metadata)
+	if err != nil {
+		return err
+	}
+	_, err = s.db.Exec(`UPDATE files SET file_metadata = ? WHERE id = ?`, string(jsonBytes), fileID)
+	return err
+}
+
+func (s *Store) GetFileContent(fileID int64) (string, error) {
+	var content string
+	err := s.db.QueryRow(`SELECT content FROM files_fts WHERE file_id = ?`, fileID).Scan(&content)
+	if err == sql.ErrNoRows {
+		return "", nil
+	}
+	return content, err
 }

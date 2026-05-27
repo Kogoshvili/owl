@@ -5,15 +5,16 @@ import (
 
 	"owl/internal/api/handler"
 	"owl/internal/api/middleware"
+	"owl/internal/extractor"
 	"owl/internal/scanner"
 	"owl/internal/store"
 )
 
-func NewRouter(s *store.Store, sc *scanner.Scanner) http.Handler {
+func NewRouter(s *store.Store, sc *scanner.Scanner, ext *extractor.Extractor) http.Handler {
 	mux := http.NewServeMux()
 
-	wdh := handler.NewWatchedDirHandler(s, sc)
-	fh := handler.NewFileHandler(s)
+	wdh := handler.NewWatchedDirHandler(s, sc, ext)
+	fh := handler.NewFileHandler(s, ext)
 	ch := handler.NewCommentHandler(s)
 	th := handler.NewTagHandler(s)
 	vfh := handler.NewVirtualFolderHandler(s)
@@ -27,10 +28,13 @@ func NewRouter(s *store.Store, sc *scanner.Scanner) http.Handler {
 	mux.HandleFunc("PATCH /watched-directories/{id}", wdh.Update)
 	mux.HandleFunc("DELETE /watched-directories/{id}", wdh.Delete)
 	mux.HandleFunc("POST /watched-directories/{id}/scan", wdh.Scan)
+	mux.HandleFunc("POST /watched-directories/{id}/extract", wdh.Extract)
 
 	mux.HandleFunc("GET /files", fh.List)
 	mux.HandleFunc("GET /files/{id}", fh.Get)
+	mux.HandleFunc("GET /files/{id}/raw", fh.Raw)
 	mux.HandleFunc("GET /watched-directories/{id}/files", fh.ListByDir)
+	mux.HandleFunc("POST /files/{id}/extract", fh.Extract)
 
 	mux.HandleFunc("PUT /files/{id}/comment", ch.Upsert)
 	mux.HandleFunc("DELETE /files/{id}/comment", ch.Delete)

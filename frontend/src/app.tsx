@@ -5,6 +5,7 @@ import { FilesPage } from "./pages/files"
 import { WatchedDirsPage } from "./pages/watched-dirs"
 import { NotesPage } from "./pages/notes"
 import { SearchPage } from "./pages/search"
+import { FileDetailPage } from "./pages/file-detail"
 import "./app.css"
 
 function NavLink({ href, children }: { href: string; children: string }) {
@@ -38,6 +39,7 @@ export function App() {
         <Router>
           <Route path="/" component={DashboardPage} />
           <Route path="/files" component={FilesPage} />
+          <Route path="/files/:id" component={FileDetailPage} />
           <Route path="/watched-directories" component={WatchedDirsPage} />
           <Route path="/notes" component={NotesPage} />
           <Route path="/search" component={SearchPage} />

@@ -20,12 +20,38 @@ export interface File {
   modified_at: string
   indexed_at: string | null
   content_indexed_at: string | null
+  processing_status: string
+  processing_error: string | null
+  file_metadata: Record<string, unknown> | null
+  processable?: boolean | null
+}
+
+export interface Tag {
+  id: number
+  name: string
+  source: string
+  created_at: string
+}
+
+export interface Comment {
+  id: number
+  file_id: number
+  content: string
+  created_at: string
+  updated_at: string
+}
+
+export interface FileDetail {
+  file: File
+  comment: Comment | null
+  tags: Tag[]
+  extracted_content: string | null
 }
 
 const BASE = "/api"
 
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
-  const res = await fetch(`${BASE}${path}`, options)
+  const res = await fetch(`${BASE}${path}`, { cache: "no-store", ...options })
   if (!res.ok) {
     const body = await res.json().catch(() => ({}))
     throw new Error(body.error || `HTTP ${res.status}`)
@@ -61,4 +87,86 @@ export function getFilesByDir(dirId: number): Promise<File[]> {
 
 export function getAllFiles(limit = 200): Promise<File[]> {
   return request<File[]>(`/files?limit=${limit}`)
+}
+
+export function extractDir(id: number): Promise<{queued: number}> {
+  return request<{queued: number}>(`/watched-directories/${id}/extract`, {
+    method: "POST",
+  })
+}
+
+export function extractFile(id: number): Promise<{status: string}> {
+  return request<{status: string}>(`/files/${id}/extract`, {
+    method: "POST",
+  })
+}
+
+export function getFileDetail(id: number): Promise<FileDetail> {
+  return request<FileDetail>(`/files/${id}`)
+}
+
+export function getFileRawUrl(id: number): string {
+  return `${BASE}/files/${id}/raw`
+}
+
+export function upsertComment(fileId: number, content: string): Promise<Comment> {
+  return request<Comment>(`/files/${fileId}/comment`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ content }),
+  })
+}
+
+export function deleteComment(fileId: number): Promise<void> {
+  return request<void>(`/files/${fileId}/comment`, { method: "DELETE" })
+}
+
+export function listTags(): Promise<Tag[]> {
+  return request<Tag[]>("/tags")
+}
+
+export function addFileTag(fileId: number, name: string): Promise<Tag> {
+  return request<Tag>(`/files/${fileId}/tags`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ name }),
+  })
+}
+
+export function removeFileTag(fileId: number, tagId: number): Promise<void> {
+  return request<void>(`/files/${fileId}/tags/${tagId}`, { method: "DELETE" })
+}
+
+export interface SearchFileResult {
+  file_id: number
+  name: string
+  path: string
+  extension: string
+  rank: number
+  snippet: string
+  match_sources: string[]
+}
+
+export interface SearchNoteResult {
+  note_id: number
+  title: string
+  rank: number
+  snippet: string
+  match_sources: string[]
+}
+
+export interface SearchResults {
+  files: SearchFileResult[]
+  notes: SearchNoteResult[]
+}
+
+export const ALL_SCOPES = ["filenames", "content", "comments", "tags", "notes"] as const
+export type SearchScope = typeof ALL_SCOPES[number]
+
+export function searchFiles(query: string, scopes?: SearchScope[]): Promise<SearchResults> {
+  const params = new URLSearchParams({ q: query })
+  if (scopes && scopes.length < ALL_SCOPES.length) {
+    params.set("scopes", scopes.join(","))
+  }
+  return request<SearchResults>(`/search?${params}`)
 }

@@ -9,10 +9,11 @@ interface Props {
   addMutation: UseMutationResult<WatchedDir, Error, string>
   scanMutation: UseMutationResult<WatchedDir, Error, number>
   deleteMutation: UseMutationResult<void, Error, number>
+  extractMutation: UseMutationResult<{queued: number}, Error, number>
   onSelect?: (dirId: number | null) => void
 }
 
-export function WatchedDirs({ dirs, selectedDirId, loading, addMutation, scanMutation, deleteMutation, onSelect }: Props) {
+export function WatchedDirs({ dirs, selectedDirId, loading, addMutation, scanMutation, deleteMutation, extractMutation, onSelect }: Props) {
   const [path, setPath] = useState("")
   const [error, setError] = useState("")
 
@@ -35,6 +36,14 @@ export function WatchedDirs({ dirs, selectedDirId, loading, addMutation, scanMut
   const handleScan = async (id: number) => {
     try {
       await scanMutation.mutateAsync(id)
+    } catch (e: any) {
+      setError(e.message)
+    }
+  }
+
+  const handleExtract = async (id: number) => {
+    try {
+      await extractMutation.mutateAsync(id)
     } catch (e: any) {
       setError(e.message)
     }
@@ -110,6 +119,13 @@ export function WatchedDirs({ dirs, selectedDirId, loading, addMutation, scanMut
                 Scan
               </button>
               <button
+                class="btn btn-sm"
+                disabled={extractMutation.isPending}
+                onClick={(e) => { e.stopPropagation(); handleExtract(dir.id) }}
+              >
+                Extract
+              </button>
+              <button
                 class="btn btn-sm btn-danger"
                 disabled={deleteMutation.isPending}
                 onClick={(e) => { e.stopPropagation(); handleDelete(dir.id) }}
@@ -124,7 +140,7 @@ export function WatchedDirs({ dirs, selectedDirId, loading, addMutation, scanMut
   )
 }
 
-export function WatchedDirsPanel({ dirs, loading, addMutation, scanMutation, deleteMutation }: Omit<Props, "selectedDirId" | "onSelect">) {
+export function WatchedDirsPanel({ dirs, loading, addMutation, scanMutation, deleteMutation, extractMutation }: Omit<Props, "selectedDirId" | "onSelect">) {
   return (
     <WatchedDirs
       dirs={dirs}
@@ -132,6 +148,7 @@ export function WatchedDirsPanel({ dirs, loading, addMutation, scanMutation, del
       addMutation={addMutation}
       scanMutation={scanMutation}
       deleteMutation={deleteMutation}
+      extractMutation={extractMutation}
     />
   )
 }

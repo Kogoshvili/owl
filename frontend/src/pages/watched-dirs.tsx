@@ -1,4 +1,4 @@
-import { useWatchedDirs, useAddWatchedDir, useScanDir, useDeleteDir } from "../hooks/queries"
+import { useWatchedDirs, useAddWatchedDir, useScanDir, useDeleteDir, useExtractDir } from "../hooks/queries"
 import { WatchedDirsPanel } from "../components/watched-dirs"
 
 export function WatchedDirsPage() {
@@ -6,6 +6,7 @@ export function WatchedDirsPage() {
   const addMutation = useAddWatchedDir()
   const scanMutation = useScanDir()
   const deleteMutation = useDeleteDir()
+  const extractMutation = useExtractDir()
 
   return (
     <div class="page">
@@ -15,6 +16,7 @@ export function WatchedDirsPage() {
         addMutation={addMutation}
         scanMutation={scanMutation}
         deleteMutation={deleteMutation}
+        extractMutation={extractMutation}
       />
     </div>
   )
