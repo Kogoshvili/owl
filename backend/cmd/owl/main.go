@@ -9,6 +9,7 @@ import (
 
 	"owl/internal/api"
 	"owl/internal/db"
+	"owl/internal/store"
 )
 
 func main() {
@@ -23,7 +24,8 @@ func main() {
 	}
 	defer database.Close()
 
-	router := api.NewRouter()
+	s := store.New(database)
+	router := api.NewRouter(s)
 	addr := ":3721"
 	fmt.Printf("Owl backend listening on %s\n", addr)
 	log.Fatal(http.ListenAndServe(addr, router))
