@@ -1,5 +1,5 @@
 import { useState } from "preact/hooks"
-import { useTags, useTagFiles, useAcceptTag, useDeleteTag } from "../hooks/queries"
+import { useTags, useTagFiles, useAcceptTag, useDeleteTag, useRefineTag } from "../hooks/queries"
 import { route } from "preact-router"
 import type { TagWithCount } from "../api"
 
@@ -8,7 +8,9 @@ export function TagSuggestions() {
   const autoTagMutation = useTagFiles()
   const acceptMutation = useAcceptTag()
   const deleteMutation = useDeleteTag()
+  const refineMutation = useRefineTag()
   const [autoTagResult, setAutoTagResult] = useState<{count: number; tagged: number; tag_count: number} | null>(null)
+  const [refiningId, setRefiningId] = useState<number | null>(null)
 
   const autoTags = tagsQuery.data ?? []
 
@@ -38,6 +40,17 @@ export function TagSuggestions() {
     }
   }
 
+  const handleRefine = async (id: number) => {
+    setRefiningId(id)
+    try {
+      await refineMutation.mutateAsync(id)
+    } catch (e: any) {
+      console.error(e)
+    } finally {
+      setRefiningId(null)
+    }
+  }
+
   const handleAcceptAll = async () => {
     for (const t of autoTags) {
       try {
@@ -52,6 +65,16 @@ export function TagSuggestions() {
     for (const t of autoTags) {
       try {
         await deleteMutation.mutateAsync(t.id)
+      } catch (e: any) {
+        console.error(e)
+      }
+    }
+  }
+
+  const handleRefineAll = async () => {
+    for (const t of autoTags) {
+      try {
+        await refineMutation.mutateAsync(t.id)
       } catch (e: any) {
         console.error(e)
       }
@@ -74,6 +97,9 @@ export function TagSuggestions() {
           </button>
           {autoTags.length > 0 && (
             <>
+              <button class="btn btn-sm" onClick={handleRefineAll} disabled={refineMutation.isPending}>
+                Refine All
+              </button>
               <button class="btn btn-sm" onClick={handleAcceptAll} disabled={acceptMutation.isPending}>
                 Accept All
               </button>
@@ -104,8 +130,10 @@ export function TagSuggestions() {
             tag={tag}
             onAccept={() => handleAccept(tag.id)}
             onDelete={() => handleDelete(tag.id)}
+            onRefine={() => handleRefine(tag.id)}
             accepting={acceptMutation.isPending}
             deleting={deleteMutation.isPending}
+            refining={refiningId === tag.id}
           />
         ))}
       </div>
@@ -113,12 +141,14 @@ export function TagSuggestions() {
   )
 }
 
-function TagSuggestionCard({ tag, onAccept, onDelete, accepting, deleting }: {
+function TagSuggestionCard({ tag, onAccept, onDelete, onRefine, accepting, deleting, refining }: {
   tag: TagWithCount
   onAccept: () => void
   onDelete: () => void
+  onRefine: () => void
   accepting: boolean
   deleting: boolean
+  refining: boolean
 }) {
   return (
     <div class="tag-suggestion-card" onClick={() => route(`/tags/${tag.id}`)}>
@@ -126,7 +156,13 @@ function TagSuggestionCard({ tag, onAccept, onDelete, accepting, deleting }: {
         <span class="tag-suggestion-name">{tag.name}</span>
         <span class="tag-suggestion-count">{tag.file_count} file{tag.file_count !== 1 ? "s" : ""}</span>
       </div>
+      {tag.description && (
+        <div class="tag-suggestion-desc">{tag.description}</div>
+      )}
       <div class="tag-suggestion-actions" onClick={(e) => e.stopPropagation()}>
+        <button class="btn btn-sm btn-primary" onClick={onRefine} disabled={refining}>
+          {refining ? "Refining..." : "Refine"}
+        </button>
         <button class="btn btn-sm btn-primary" onClick={onAccept} disabled={accepting}>
           Accept
         </button>

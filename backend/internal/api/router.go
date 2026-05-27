@@ -6,11 +6,12 @@ import (
 	"owl/internal/api/handler"
 	"owl/internal/api/middleware"
 	"owl/internal/extractor"
+	"owl/internal/llm"
 	"owl/internal/scanner"
 	"owl/internal/store"
 )
 
-func NewRouter(s *store.Store, sc *scanner.Scanner, ext *extractor.Extractor) http.Handler {
+func NewRouter(s *store.Store, sc *scanner.Scanner, ext *extractor.Extractor, llmClient *llm.Client) http.Handler {
 	mux := http.NewServeMux()
 
 	wdh := handler.NewWatchedDirHandler(s, sc, ext)
@@ -20,7 +21,7 @@ func NewRouter(s *store.Store, sc *scanner.Scanner, ext *extractor.Extractor) ht
 	vfh := handler.NewVirtualFolderHandler(s)
 	nh := handler.NewNoteHandler(s)
 	sh := handler.NewSearchHandler(s)
-	ih := handler.NewIntelligenceHandler(s)
+	ih := handler.NewIntelligenceHandler(s, llmClient)
 
 	mux.HandleFunc("GET /health", handleHealth)
 
@@ -77,6 +78,8 @@ func NewRouter(s *store.Store, sc *scanner.Scanner, ext *extractor.Extractor) ht
 	mux.HandleFunc("GET /intelligence/tags/{id}/files", ih.ListTagFiles)
 	mux.HandleFunc("DELETE /intelligence/tags/{id}", ih.DeleteTag)
 	mux.HandleFunc("POST /intelligence/tags/{id}/accept", ih.AcceptTag)
+	mux.HandleFunc("POST /intelligence/refine/folder/{id}", ih.RefineFolder)
+	mux.HandleFunc("POST /intelligence/refine/tag/{id}", ih.RefineTag)
 
 	return middleware.Logging(middleware.CORS(mux))
 }

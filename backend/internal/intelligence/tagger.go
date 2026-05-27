@@ -1,7 +1,9 @@
 package intelligence
 
 import (
+	"context"
 	"log/slog"
+	"owl/internal/llm"
 	"owl/internal/store"
 	"path/filepath"
 	"strings"
@@ -61,12 +63,14 @@ var extensionTags = map[string]string{
 type Tagger struct {
 	analyzer *Analyzer
 	store    *store.Store
+	llm      *llm.Client
 }
 
-func NewTagger(analyzer *Analyzer, store *store.Store) *Tagger {
+func NewTagger(analyzer *Analyzer, store *store.Store, llmClient *llm.Client) *Tagger {
 	return &Tagger{
 		analyzer: analyzer,
 		store:    store,
+		llm:      llmClient,
 	}
 }
 
@@ -97,8 +101,8 @@ func (t *Tagger) AutoTagFile(fileID int64) ([]store.Tag, error) {
 	return t.tagFile(file, content, true)
 }
 
-func (t *Tagger) AutoTagFiles(fileIDs []int64) (map[int64][]store.Tag, error) {
-	slog.Info("auto-tag: starting bulk", "files", len(fileIDs))
+func (t *Tagger) AutoTagFiles(ctx context.Context, fileIDs []int64) (map[int64][]store.Tag, error) {
+	slog.Info("auto-tag: starting bulk", "files", len(fileIDs), "llm_enabled", t.llm != nil && t.llm.IsAvailable(ctx))
 
 	// Collect all tag candidates across all files
 	fileContents := make(map[int64]string)
@@ -152,16 +156,69 @@ func (t *Tagger) AutoTagFiles(fileIDs []int64) (map[int64][]store.Tag, error) {
 
 	// Pass 2: write tags that pass threshold
 	result := make(map[int64][]store.Tag)
+	createdTags := make(map[string]*store.Tag)
 	for tagName, fileIDs := range tagCandidates {
 		tag, err := t.store.EnsureTag(tagName, "auto")
 		if err != nil {
 			continue
 		}
+		createdTags[tagName] = tag
 		for _, fileID := range fileIDs {
 			if err := t.store.AddFileTag(fileID, tag.ID, "auto"); err != nil {
 				continue
 			}
 			result[fileID] = append(result[fileID], *tag)
+		}
+	}
+
+	// LLM refinement: evaluate and rename/delete tags
+	llmAvailable := t.llm != nil && t.llm.IsAvailable(ctx)
+	if llmAvailable {
+		slog.Info("auto-tag: LLM refinement", "tags_to_evaluate", len(createdTags))
+		for tagName, tag := range createdTags {
+			files, err := t.store.GetFilesByTag(tag.ID)
+			if err != nil || len(files) == 0 {
+				continue
+			}
+
+			fileNames := make([]string, 0, len(files))
+			for _, f := range files {
+				fileNames = append(fileNames, f.Name)
+			}
+
+			keywords := t.getTagKeywords(files)
+
+			refinement, err := t.llm.RefineTag(ctx, tagName, fileNames, keywords)
+			if err != nil {
+				continue
+			}
+
+			if !refinement.Meaningful {
+				slog.Info("auto-tag: LLM rejected tag", "name", tagName, "reason", refinement.Reason)
+				t.store.DeleteTag(tag.ID)
+				for _, fileID := range fileIDs {
+					if tags, ok := result[fileID]; ok {
+						filtered := []store.Tag{}
+						for _, t := range tags {
+							if t.ID != tag.ID {
+								filtered = append(filtered, t)
+							}
+						}
+						result[fileID] = filtered
+					}
+				}
+				continue
+			}
+
+			if refinement.BetterName != "" && refinement.BetterName != tagName {
+				slog.Info("auto-tag: LLM renamed tag", "from", tagName, "to", refinement.BetterName, "reason", refinement.Reason)
+				_ = t.store.UpdateTagName(tag.ID, refinement.BetterName)
+			}
+
+			if refinement.Description != "" {
+				slog.Info("auto-tag: LLM added description to tag", "name", tag.Name, "description", refinement.Description)
+				_ = t.store.UpdateTagDescription(tag.ID, refinement.Description)
+			}
 		}
 	}
 
@@ -293,6 +350,47 @@ func (t *Tagger) collectTagsFromFile(file *store.File, content string) []string 
 	}
 
 	return tagNames
+}
+
+func (t *Tagger) getTagKeywords(files []store.File) []string {
+	keywordCount := make(map[string]int)
+	for _, f := range files {
+		if f.ProcessingStatus == "processed" {
+			keywords, err := t.analyzer.GetFileKeywords(f.ID, 5)
+			if err != nil {
+				continue
+			}
+			for _, kw := range keywords {
+				keywordCount[kw.Term]++
+			}
+		}
+	}
+
+	type kwCount struct {
+		keyword string
+		count   int
+	}
+	kws := make([]kwCount, 0, len(keywordCount))
+	for k, v := range keywordCount {
+		kws = append(kws, kwCount{k, v})
+	}
+
+	for i := 0; i < len(kws); i++ {
+		for j := i + 1; j < len(kws); j++ {
+			if kws[i].count < kws[j].count {
+				kws[i], kws[j] = kws[j], kws[i]
+			}
+		}
+	}
+
+	result := []string{}
+	for i, kw := range kws {
+		if i >= 10 {
+			break
+		}
+		result = append(result, kw.keyword)
+	}
+	return result
 }
 
 func (t *Tagger) getExtensionTag(ext string) string {

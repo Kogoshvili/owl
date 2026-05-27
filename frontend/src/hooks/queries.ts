@@ -35,6 +35,8 @@ import {
   listTagFiles,
   deleteTag,
   acceptTag,
+  refineFolder,
+  refineTag,
   type SearchScope,
 } from "../api"
 import type { FilterState } from "../components/file-list"
@@ -393,5 +395,30 @@ export function useAcceptTag() {
   return useMutation({
     mutationFn: (id: number) => acceptTag(id),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["tags"] }),
+  })
+}
+
+export function useRefineFolder() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (id: number) => refineFolder(id),
+    onSuccess: (_data, id) => {
+      setTimeout(() => {
+        qc.invalidateQueries({ queryKey: ["virtualFolders"] })
+        qc.invalidateQueries({ queryKey: ["virtualFolder", id] })
+      }, 3000)
+    },
+  })
+}
+
+export function useRefineTag() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (id: number) => refineTag(id),
+    onSuccess: () => {
+      setTimeout(() => {
+        qc.invalidateQueries({ queryKey: ["tags"] })
+      }, 3000)
+    },
   })
 }

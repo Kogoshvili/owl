@@ -30,6 +30,16 @@ export interface Tag {
   id: number
   name: string
   source: string
+  description: string
+  created_at: string
+}
+
+export interface TagWithCount {
+  id: number
+  name: string
+  source: string
+  description: string
+  file_count: number
   created_at: string
 }
 
@@ -379,6 +389,18 @@ export function deleteTag(id: number): Promise<void> {
 
 export function acceptTag(id: number): Promise<Tag> {
   return request<Tag>(`/intelligence/tags/${id}/accept`, {
+    method: "POST",
+  })
+}
+
+export function refineFolder(id: number): Promise<{related: boolean, action: string, folder?: VirtualFolder}> {
+  return request<{related: boolean, action: string, folder?: VirtualFolder}>(`/intelligence/refine/folder/${id}`, {
+    method: "POST",
+  })
+}
+
+export function refineTag(id: number): Promise<{meaningful: boolean, action: string, tag?: Tag}> {
+  return request<{meaningful: boolean, action: string, tag?: Tag}>(`/intelligence/refine/tag/${id}`, {
     method: "POST",
   })
 }

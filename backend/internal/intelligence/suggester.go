@@ -1,17 +1,21 @@
 package intelligence
 
 import (
+	"context"
 	"fmt"
 	"log/slog"
+	"owl/internal/llm"
 	"owl/internal/store"
 	"sort"
 	"time"
 )
 
-// MinFilesForFolder is the minimum number of files a virtual folder must contain
-// to be suggested. Matches minTagFileCount for consistency.
-// TODO: Make configurable via settings in a future release.
-const MinFilesForFolder = 3
+const (
+	MinFilesForFolder = 3
+	maxFilesForLLM         = 50
+	subClusterThresholdBoost = 0.15
+	maxFilesForNaming       = 30
+)
 
 type Suggestion struct {
 	Name        string
@@ -24,24 +28,26 @@ type Suggestion struct {
 type Suggester struct {
 	analyzer *Analyzer
 	store    *store.Store
+	llm      *llm.Client
 }
 
-func NewSuggester(analyzer *Analyzer, store *store.Store) *Suggester {
+func NewSuggester(analyzer *Analyzer, store *store.Store, llmClient *llm.Client) *Suggester {
 	return &Suggester{
 		analyzer: analyzer,
 		store:    store,
+		llm:      llmClient,
 	}
 }
 
-func (s *Suggester) SuggestVirtualFolders(minFiles int, minSimilarity float64) ([]Suggestion, error) {
+func (s *Suggester) SuggestVirtualFolders(ctx context.Context, minFiles int, minSimilarity float64) ([]Suggestion, error) {
 	if minFiles <= 0 {
 		minFiles = MinFilesForFolder
 	}
 	if minSimilarity <= 0 {
-		minSimilarity = 0.3
+		minSimilarity = 0.45
 	}
 
-	slog.Info("suggester: starting", "min_files", minFiles, "min_similarity", minSimilarity)
+	slog.Info("suggester: starting", "min_files", minFiles, "min_similarity", minSimilarity, "llm_enabled", s.llm != nil && s.llm.IsAvailable(ctx))
 
 	fileIDs, err := s.analyzer.GetProcessedFiles(500)
 	if err != nil {
@@ -82,6 +88,22 @@ func (s *Suggester) SuggestVirtualFolders(minFiles int, minSimilarity float64) (
 
 	slog.Info("suggester: clustering files")
 	clusters := s.clusterFiles(fileIDs, similarityMatrix, minSimilarity, minFiles)
+
+	llmAvailable := s.llm != nil && s.llm.IsAvailable(ctx)
+	if llmAvailable {
+		slog.Info("suggester: sub-clustering large groups", "threshold_boost", subClusterThresholdBoost)
+		subClustered := [][]int64{}
+		for _, cluster := range clusters {
+			if len(cluster) > maxFilesForLLM {
+				subClusters := s.subCluster(cluster, similarityMatrix, minSimilarity+subClusterThresholdBoost, minFiles)
+				subClustered = append(subClustered, subClusters...)
+			} else {
+				subClustered = append(subClustered, cluster)
+			}
+		}
+		clusters = subClustered
+	}
+
 	slog.Info("suggester: clusters found", "clusters", len(clusters))
 
 	fileNames, err := s.analyzer.GetFileNames(fileIDs)
@@ -95,9 +117,50 @@ func (s *Suggester) SuggestVirtualFolders(minFiles int, minSimilarity float64) (
 			continue
 		}
 
-		name, err := s.generateFolderName(cluster, corpusKeywords)
-		if err != nil {
-			continue
+		name := ""
+		description := ""
+
+		if llmAvailable {
+			files, err := s.buildClusterFiles(cluster, corpusKeywords, fileNames)
+			if err == nil {
+				 refinement, err := s.llm.RefineCluster(ctx, files, cluster, name)
+				if err == nil && refinement != nil {
+					if !refinement.Related {
+						slog.Debug("suggester: LLM rejected cluster", "files", len(cluster), "reason", refinement.Reason)
+						continue
+					}
+					name = refinement.Name
+					description = refinement.Description
+					if len(refinement.RemovedIDs) > 0 {
+						removed := make(map[int64]bool)
+						for _, id := range refinement.RemovedIDs {
+							removed[id] = true
+						}
+						filtered := []int64{}
+						for _, id := range cluster {
+							if !removed[id] {
+								filtered = append(filtered, id)
+							}
+						}
+						if len(filtered) < minFiles {
+							slog.Debug("suggester: LLM removed too many files", "remaining", len(filtered))
+							continue
+						}
+						cluster = filtered
+					}
+				}
+			}
+		}
+
+		if name == "" {
+			var err error
+			name, err = s.generateFolderName(cluster, corpusKeywords)
+			if err != nil {
+				continue
+			}
+		}
+		if description == "" {
+			description = fmt.Sprintf("Auto-generated from %d related files", len(cluster))
 		}
 
 		preview := s.getFilePreview(cluster, fileNames)
@@ -105,7 +168,7 @@ func (s *Suggester) SuggestVirtualFolders(minFiles int, minSimilarity float64) (
 
 		suggestions = append(suggestions, Suggestion{
 			Name:        name,
-			Description: fmt.Sprintf("Auto-generated from %d related files", len(cluster)),
+			Description: description,
 			FileIDs:     cluster,
 			Score:       score,
 			Preview:     preview,
@@ -165,6 +228,49 @@ func (s *Suggester) clusterFiles(fileIDs []int64, similarityMatrix map[[2]int64]
 	}
 
 	return clusters
+}
+
+func (s *Suggester) subCluster(cluster []int64, similarityMatrix map[[2]int64]float64, minSim float64, minFiles int) [][]int64 {
+	return s.clusterFiles(cluster, similarityMatrix, minSim, minFiles)
+}
+
+func (s *Suggester) buildClusterFiles(fileIDs []int64, corpusKeywords map[int64][]Keyword, fileNames map[int64]string) ([]llm.ClusterFile, error) {
+	clusterFiles := []llm.ClusterFile{}
+
+	for _, fileID := range fileIDs {
+		name, ok := fileNames[fileID]
+		if !ok {
+			continue
+		}
+		file, err := s.store.GetFile(fileID)
+		if err != nil || file == nil {
+			continue
+		}
+
+		keywords := []string{}
+		if kw, ok := corpusKeywords[fileID]; ok {
+			for i, k := range kw {
+				if i >= 5 {
+					break
+				}
+				keywords = append(keywords, k.Term)
+			}
+		}
+
+		clusterFiles = append(clusterFiles, llm.ClusterFile{
+			ID:        fileID,
+			Name:      name,
+			Extension: file.Extension,
+			ParentDir: file.ParentDir,
+			Keywords:  keywords,
+		})
+	}
+
+	return clusterFiles, nil
+}
+
+func (s *Suggester) BuildClusterFiles(fileIDs []int64, corpusKeywords map[int64][]Keyword, fileNames map[int64]string) ([]llm.ClusterFile, error) {
+	return s.buildClusterFiles(fileIDs, corpusKeywords, fileNames)
 }
 
 func (s *Suggester) generateFolderName(fileIDs []int64, corpusKeywords map[int64][]Keyword) (string, error) {

@@ -1,10 +1,12 @@
 package handler
 
 import (
+	"context"
 	"encoding/json"
 	"log/slog"
 	"net/http"
 	"owl/internal/intelligence"
+	"owl/internal/llm"
 	"owl/internal/store"
 	"strconv"
 	"time"
@@ -15,15 +17,17 @@ type IntelligenceHandler struct {
 	analyzer   *intelligence.Analyzer
 	tagger     *intelligence.Tagger
 	suggester  *intelligence.Suggester
+	llm        *llm.Client
 }
 
-func NewIntelligenceHandler(s *store.Store) *IntelligenceHandler {
+func NewIntelligenceHandler(s *store.Store, llmClient *llm.Client) *IntelligenceHandler {
 	analyzer := intelligence.NewAnalyzer(s.Db())
 	return &IntelligenceHandler{
 		store:     s,
 		analyzer:  analyzer,
-		tagger:    intelligence.NewTagger(analyzer, s),
-		suggester: intelligence.NewSuggester(analyzer, s),
+		tagger:    intelligence.NewTagger(analyzer, s, llmClient),
+		suggester: intelligence.NewSuggester(analyzer, s, llmClient),
+		llm:       llmClient,
 	}
 }
 
@@ -81,7 +85,7 @@ func (h *IntelligenceHandler) TagFiles(w http.ResponseWriter, r *http.Request) {
 		fileIDs[i] = f.ID
 	}
 
-	result, err := h.tagger.AutoTagFiles(fileIDs)
+	result, err := h.tagger.AutoTagFiles(r.Context(), fileIDs)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
@@ -125,7 +129,7 @@ func (h *IntelligenceHandler) TagWatchedDir(w http.ResponseWriter, r *http.Reque
 		fileIDs[i] = f.ID
 	}
 
-	result, err := h.tagger.AutoTagFiles(fileIDs)
+	result, err := h.tagger.AutoTagFiles(r.Context(), fileIDs)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
@@ -199,7 +203,7 @@ func (h *IntelligenceHandler) GenerateSuggestions(w http.ResponseWriter, r *http
 		minFiles = *req.MinFiles
 	}
 
-	minSimilarity := 0.3
+	minSimilarity := 0.45
 	if req.MinSimilarity != nil && *req.MinSimilarity > 0 {
 		minSimilarity = *req.MinSimilarity
 	}
@@ -207,7 +211,7 @@ func (h *IntelligenceHandler) GenerateSuggestions(w http.ResponseWriter, r *http
 	slog.Info("generating folder suggestions", "min_files", minFiles, "min_similarity", minSimilarity)
 	start := time.Now()
 
-	suggestions, err := h.suggester.SuggestVirtualFolders(minFiles, minSimilarity)
+	suggestions, err := h.suggester.SuggestVirtualFolders(r.Context(), minFiles, minSimilarity)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
@@ -387,4 +391,178 @@ func (h *IntelligenceHandler) AcceptTag(w http.ResponseWriter, r *http.Request) 
 	}
 
 	writeJSON(w, http.StatusOK, tag)
+}
+
+func (h *IntelligenceHandler) RefineFolder(w http.ResponseWriter, r *http.Request) {
+	id, ok := parsePathID(w, r, "id")
+	if !ok {
+		return
+	}
+
+	slog.Info("request method=POST path=/intelligence/refine/folder", "id", id)
+
+	if h.llm == nil {
+		writeError(w, http.StatusServiceUnavailable, "LLM not configured")
+		return
+	}
+
+	folder, err := h.store.GetVirtualFolderDetail(id)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	if folder == nil {
+		writeError(w, http.StatusNotFound, "folder not found")
+		return
+	}
+
+	fileIDs := make([]int64, len(folder.Files))
+	for i, f := range folder.Files {
+		fileIDs[i] = f.ID
+	}
+
+	slog.Info("llm: starting refine folder", "id", id, "name", folder.Name, "files", len(fileIDs))
+
+	go func() {
+		corpusKeywords, err := h.analyzer.BuildCorpusTFIDF(fileIDs)
+		if err != nil {
+			slog.Error("llm: refine folder failed to build corpus", "id", id, "error", err)
+			return
+		}
+
+		fileNames := make(map[int64]string)
+		for _, f := range folder.Files {
+			fileNames[f.ID] = f.Name
+		}
+
+		clusterFiles, err := h.suggester.BuildClusterFiles(fileIDs, corpusKeywords, fileNames)
+		if err != nil {
+			slog.Error("llm: refine folder failed to build cluster files", "id", id, "error", err)
+			return
+		}
+
+		refinement, err := h.llm.RefineCluster(context.Background(), clusterFiles, fileIDs, folder.Name)
+		if err != nil {
+			slog.Error("llm: refine folder failed", "id", id, "name", folder.Name, "error", err)
+			return
+		}
+
+		if !refinement.Related {
+			slog.Info("llm: folder not related, deleting", "id", id, "name", folder.Name, "reason", refinement.Reason)
+			h.store.DeleteVirtualFolder(id)
+			return
+		}
+
+		if refinement.Name != "" && refinement.Name != folder.Name {
+			name := refinement.Name
+			description := refinement.Description
+			if _, err := h.store.UpdateVirtualFolder(id, &name, &description); err != nil {
+				slog.Error("llm: refine folder failed to update", "id", id, "error", err)
+				return
+			}
+			slog.Info("llm: folder refined", "id", id, "name", folder.Name, "new_name", refinement.Name, "description", refinement.Description, "reason", refinement.Reason)
+		}
+
+		if len(refinement.RemovedIDs) > 0 {
+			slog.Info("llm: folder refined, removing files", "id", id, "name", folder.Name, "removed_count", len(refinement.RemovedIDs))
+			for _, fileID := range refinement.RemovedIDs {
+				h.store.RemoveFileFromFolder(id, fileID)
+			}
+		}
+	}()
+
+	writeJSON(w, http.StatusAccepted, map[string]any{"status": "refining", "id": id})
+}
+
+func (h *IntelligenceHandler) RefineTag(w http.ResponseWriter, r *http.Request) {
+	id, ok := parsePathID(w, r, "id")
+	if !ok {
+		return
+	}
+
+	slog.Info("request method=POST path=/intelligence/refine/tag", "id", id)
+
+	if h.llm == nil {
+		writeError(w, http.StatusServiceUnavailable, "LLM not configured")
+		return
+	}
+
+	tag, err := h.store.GetTag(id)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	if tag == nil {
+		writeError(w, http.StatusNotFound, "tag not found")
+		return
+	}
+
+	files, err := h.store.GetFilesByTag(id)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	fileNames := make([]string, len(files))
+	for i, f := range files {
+		fileNames[i] = f.Name
+	}
+
+	keywords := []string{}
+	for _, f := range files {
+		if f.ProcessingStatus == "processed" {
+			kws, err := h.analyzer.GetFileKeywords(f.ID, 5)
+			if err == nil {
+				for _, kw := range kws {
+					keywords = append(keywords, kw.Term)
+				}
+			}
+		}
+		if len(keywords) >= 10 {
+			break
+		}
+	}
+
+	slog.Info("llm: starting refine tag", "id", id, "name", tag.Name, "files", len(fileNames))
+
+	go func() {
+		refinement, err := h.llm.RefineTag(context.Background(), tag.Name, fileNames, keywords)
+		if err != nil {
+			slog.Error("llm: refine tag failed", "id", id, "name", tag.Name, "error", err)
+			return
+		}
+
+		if !refinement.Meaningful {
+			slog.Info("llm: tag not meaningful, deleting", "id", id, "name", tag.Name, "reason", refinement.Reason)
+			h.store.DeleteTag(id)
+			return
+		}
+
+		changed := false
+		if refinement.BetterName != "" && refinement.BetterName != tag.Name {
+			if err := h.store.UpdateTagName(id, refinement.BetterName); err != nil {
+				slog.Error("llm: refine tag failed to rename", "id", id, "error", err)
+				return
+			}
+			changed = true
+			slog.Info("llm: tag refined", "id", id, "old_name", tag.Name, "new_name", refinement.BetterName, "reason", refinement.Reason)
+		}
+
+		if refinement.Description != "" {
+			if err := h.store.UpdateTagDescription(id, refinement.Description); err != nil {
+				slog.Error("llm: refine tag failed to set description", "id", id, "error", err)
+				return
+			}
+			slog.Info("llm: tag refined", "id", id, "name", tag.Name, "description", refinement.Description, "reason", refinement.Reason)
+			changed = true
+		}
+
+		if !changed && refinement.Reason != "" {
+			slog.Info("llm: tag refined (no changes needed)", "id", id, "name", tag.Name, "reason", refinement.Reason)
+		}
+	}()
+
+	writeJSON(w, http.StatusAccepted, map[string]any{"status": "refining", "id": id})
 }

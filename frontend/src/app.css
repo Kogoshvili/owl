@@ -1501,6 +1501,7 @@ tbody tr:hover {
   border-radius: 8px;
   padding: 12px 14px;
   transition: border-color 0.15s;
+  cursor: pointer;
 }
 
 .suggestion-card:hover {

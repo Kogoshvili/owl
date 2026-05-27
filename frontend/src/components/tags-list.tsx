@@ -83,6 +83,9 @@ function TagCard({ tag, onDelete, deleting }: {
         </span>
       </div>
       <div class="tag-card-count">{tag.file_count} file{tag.file_count !== 1 ? "s" : ""}</div>
+      {tag.description && (
+        <div class="tag-card-desc">{tag.description}</div>
+      )}
       <div class="tag-card-actions" onClick={(e) => e.stopPropagation()}>
         <button class="btn btn-sm btn-danger" onClick={onDelete} disabled={deleting}>
           Delete

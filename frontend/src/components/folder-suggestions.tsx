@@ -1,5 +1,6 @@
 import { useState } from "preact/hooks"
-import { useFolderSuggestions, useGenerateFolderSuggestions, useAcceptFolderSuggestion, useDismissFolderSuggestion } from "../hooks/queries"
+import { useFolderSuggestions, useGenerateFolderSuggestions, useAcceptFolderSuggestion, useDismissFolderSuggestion, useRefineFolder } from "../hooks/queries"
+import { route } from "preact-router"
 import type { FolderSuggestion } from "../api"
 
 export function FolderSuggestions() {
@@ -7,7 +8,9 @@ export function FolderSuggestions() {
   const generateMutation = useGenerateFolderSuggestions()
   const acceptMutation = useAcceptFolderSuggestion()
   const dismissMutation = useDismissFolderSuggestion()
+  const refineMutation = useRefineFolder()
   const [generating, setGenerating] = useState(false)
+  const [refiningId, setRefiningId] = useState<number | null>(null)
 
   const suggestions = suggestionsQuery.data ? Object.values(suggestionsQuery.data) : []
 
@@ -38,6 +41,17 @@ export function FolderSuggestions() {
     }
   }
 
+  const handleRefine = async (id: number) => {
+    setRefiningId(id)
+    try {
+      await refineMutation.mutateAsync(id)
+    } catch (e: any) {
+      console.error(e)
+    } finally {
+      setRefiningId(null)
+    }
+  }
+
   const handleAcceptAll = async () => {
     for (const s of suggestions) {
       try {
@@ -58,6 +72,16 @@ export function FolderSuggestions() {
     }
   }
 
+  const handleRefineAll = async () => {
+    for (const s of suggestions) {
+      try {
+        await refineMutation.mutateAsync(s.id)
+      } catch (e: any) {
+        console.error(e)
+      }
+    }
+  }
+
   return (
     <div class="folder-suggestions">
       <div class="folder-suggestions-header">
@@ -72,6 +96,9 @@ export function FolderSuggestions() {
           </button>
           {suggestions.length > 0 && (
             <>
+              <button class="btn btn-sm" onClick={handleRefineAll} disabled={refineMutation.isPending}>
+                Refine All
+              </button>
               <button class="btn btn-sm" onClick={handleAcceptAll} disabled={acceptMutation.isPending}>
                 Accept All
               </button>
@@ -95,8 +122,10 @@ export function FolderSuggestions() {
             suggestion={s}
             onAccept={() => handleAccept(s.id)}
             onDismiss={() => handleDismiss(s.id)}
+            onRefine={() => handleRefine(s.id)}
             accepting={acceptMutation.isPending}
             dismissing={dismissMutation.isPending}
+            refining={refiningId === s.id}
           />
         ))}
       </div>
@@ -104,15 +133,17 @@ export function FolderSuggestions() {
   )
 }
 
-function SuggestionCard({ suggestion, onAccept, onDismiss, accepting, dismissing }: {
+function SuggestionCard({ suggestion, onAccept, onDismiss, onRefine, accepting, dismissing, refining }: {
   suggestion: FolderSuggestion
   onAccept: () => void
   onDismiss: () => void
+  onRefine: () => void
   accepting: boolean
   dismissing: boolean
+  refining: boolean
 }) {
   return (
-    <div class="suggestion-card">
+    <div class="suggestion-card" onClick={() => route(`/virtual-folders/${suggestion.id}`)}>
       <div class="suggestion-card-header">
         <span class="suggestion-name">{suggestion.name}</span>
         <span class="badge badge-auto">auto</span>
@@ -133,7 +164,10 @@ function SuggestionCard({ suggestion, onAccept, onDismiss, accepting, dismissing
           )}
         </div>
       )}
-      <div class="suggestion-actions">
+      <div class="suggestion-actions" onClick={(e) => e.stopPropagation()}>
+        <button class="btn btn-sm btn-primary" onClick={onRefine} disabled={refining}>
+          {refining ? "Refining..." : "Refine"}
+        </button>
         <button class="btn btn-sm btn-primary" onClick={onAccept} disabled={accepting}>
           Accept
         </button>

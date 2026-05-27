@@ -1,5 +1,5 @@
 import { useState } from "preact/hooks"
-import { useVirtualFolderDetail, useRemoveFileFromFolder, useUpdateVirtualFolder, useDeleteVirtualFolder, useAddFilesToFolder } from "../hooks/queries"
+import { useVirtualFolderDetail, useRemoveFileFromFolder, useUpdateVirtualFolder, useDeleteVirtualFolder, useAddFilesToFolder, useRefineFolder } from "../hooks/queries"
 import { FilePickerDialog } from "../components/file-picker-dialog"
 import { route } from "preact-router"
 import type { VirtualFolder } from "../api"
@@ -12,10 +12,11 @@ function formatBytes(bytes: number): string {
   return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + " " + sizes[i]
 }
 
-function FolderHeader({ folder, updateMutation, deleteMutation }: {
+function FolderHeader({ folder, updateMutation, deleteMutation, refineMutation }: {
   folder: VirtualFolder
   updateMutation: ReturnType<typeof useUpdateVirtualFolder>
   deleteMutation: ReturnType<typeof useDeleteVirtualFolder>
+  refineMutation: ReturnType<typeof useRefineFolder>
 }) {
   const [editing, setEditing] = useState(false)
   const [name, setName] = useState(folder.name)
@@ -49,6 +50,14 @@ function FolderHeader({ folder, updateMutation, deleteMutation }: {
     }
   }
 
+  const handleRefine = async () => {
+    try {
+      await refineMutation.mutateAsync(folder.id)
+    } catch (e: any) {
+      setError(e.message)
+    }
+  }
+
   const isAuto = folder.source === "auto"
 
   if (editing) {
@@ -73,19 +82,24 @@ function FolderHeader({ folder, updateMutation, deleteMutation }: {
         {folder.materialized && <span class="badge badge-materialized">materialized</span>}
       </div>
       {folder.description && <p class="folder-detail-desc">{folder.description}</p>}
-      <div class="folder-header-actions">
-        <button class="btn btn-sm" onClick={() => setEditing(true)}>Edit</button>
-        {isAuto && (
-          <button class="btn btn-sm btn-danger" onClick={handleDismiss} disabled={deleteMutation.isPending}>
-            Dismiss
-          </button>
-        )}
-        {!isAuto && (
-          <button class="btn btn-sm btn-danger" onClick={handleDelete} disabled={deleteMutation.isPending}>
-            Delete
-          </button>
-        )}
-      </div>
+       <div class="folder-header-actions">
+         <button class="btn btn-sm" onClick={() => setEditing(true)}>Edit</button>
+         {isAuto && (
+           <>
+             <button class="btn btn-sm btn-primary" onClick={handleRefine} disabled={refineMutation.isPending}>
+               {refineMutation.isPending ? "Refining..." : "Refine"}
+             </button>
+             <button class="btn btn-sm btn-danger" onClick={handleDismiss} disabled={deleteMutation.isPending}>
+               Dismiss
+             </button>
+           </>
+         )}
+         {!isAuto && (
+           <button class="btn btn-sm btn-danger" onClick={handleDelete} disabled={deleteMutation.isPending}>
+             Delete
+           </button>
+         )}
+       </div>
     </div>
   )
 }
@@ -97,6 +111,7 @@ export function VirtualFolderDetailPage({ id }: { id: string }) {
   const updateMutation = useUpdateVirtualFolder()
   const deleteMutation = useDeleteVirtualFolder()
   const addFilesMutation = useAddFilesToFolder()
+  const refineMutation = useRefineFolder()
   const [pickerOpen, setPickerOpen] = useState(false)
 
   if (isNaN(folderId)) return <div class="page"><div class="error-msg">Invalid folder ID</div></div>
@@ -129,7 +144,7 @@ export function VirtualFolderDetailPage({ id }: { id: string }) {
     <div class="page folder-detail-page">
       <button class="btn btn-back" onClick={() => route("/virtual-folders")}>&larr; Back</button>
 
-      <FolderHeader folder={folder} updateMutation={updateMutation} deleteMutation={deleteMutation} />
+      <FolderHeader folder={folder} updateMutation={updateMutation} deleteMutation={deleteMutation} refineMutation={refineMutation} />
 
       <div class="folder-section">
         <div class="folder-section-header">

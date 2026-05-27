@@ -1,5 +1,5 @@
 import { useState } from "preact/hooks"
-import { useTags, useTagFilesList, useAcceptTag, useDeleteTag } from "../hooks/queries"
+import { useTags, useTagFilesList, useAcceptTag, useDeleteTag, useRefineTag } from "../hooks/queries"
 import { route } from "preact-router"
 import type { FilterState } from "../components/file-list"
 import type { File } from "../api"
@@ -28,6 +28,7 @@ export function TagDetailPage({ id }: { id?: string }) {
 
   const acceptMutation = useAcceptTag()
   const deleteMutation = useDeleteTag()
+  const refineMutation = useRefineTag()
 
   const handleAccept = () => {
     acceptMutation.mutate(tagId)
@@ -37,6 +38,10 @@ export function TagDetailPage({ id }: { id?: string }) {
     deleteMutation.mutate(tagId, {
       onSuccess: () => route("/tags"),
     })
+  }
+
+  const handleRefine = () => {
+    refineMutation.mutate(tagId)
   }
 
   if (tagsQuery.isLoading) return <div class="page"><div class="empty">Loading...</div></div>
@@ -49,25 +54,29 @@ export function TagDetailPage({ id }: { id?: string }) {
     <div class="page tag-detail-page">
       <button class="btn btn-back" onClick={() => route("/tags")}>&larr; Back</button>
 
-      <div class="tag-detail-header">
-        <div class="tag-detail-title-row">
-          <h2>{tag.name}</h2>
-          <span class={`badge ${tag.source === "auto" ? "badge-auto" : "badge-manual"}`}>
-            {tag.source}
-          </span>
-        </div>
-        <div class="tag-detail-meta">{tag.file_count} file{tag.file_count !== 1 ? "s" : ""}</div>
-        {tag.source === "auto" && (
-          <div class="tag-detail-actions">
-            <button class="btn btn-sm btn-primary" onClick={handleAccept} disabled={acceptMutation.isPending}>
-              {acceptMutation.isPending ? "Accepting..." : "Accept"}
-            </button>
-            <button class="btn btn-sm btn-danger" onClick={handleDismiss} disabled={deleteMutation.isPending}>
-              {deleteMutation.isPending ? "Dismissing..." : "Dismiss"}
-            </button>
-          </div>
-        )}
-      </div>
+       <div class="tag-detail-header">
+         <div class="tag-detail-title-row">
+           <h2>{tag.name}</h2>
+           <span class={`badge ${tag.source === "auto" ? "badge-auto" : "badge-manual"}`}>
+             {tag.source}
+           </span>
+         </div>
+         {tag.description && <div class="tag-detail-desc">{tag.description}</div>}
+         <div class="tag-detail-meta">{tag.file_count} file{tag.file_count !== 1 ? "s" : ""}</div>
+         {tag.source === "auto" && (
+           <div class="tag-detail-actions">
+             <button class="btn btn-sm btn-primary" onClick={handleRefine} disabled={refineMutation.isPending}>
+               {refineMutation.isPending ? "Refining..." : "Refine"}
+             </button>
+             <button class="btn btn-sm btn-primary" onClick={handleAccept} disabled={acceptMutation.isPending}>
+               {acceptMutation.isPending ? "Accepting..." : "Accept"}
+             </button>
+             <button class="btn btn-sm btn-danger" onClick={handleDismiss} disabled={deleteMutation.isPending}>
+               {deleteMutation.isPending ? "Dismissing..." : "Dismiss"}
+             </button>
+           </div>
+         )}
+       </div>
 
       <div class="tag-files-section">
         <h3>Files ({total})</h3>
