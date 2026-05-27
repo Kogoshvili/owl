@@ -13,23 +13,31 @@ type File struct {
 	MimeType         string     `json:"mime_type"`
 	Size             int64      `json:"size"`
 	ParentDir        string     `json:"parent_dir"`
+	WatchedDirID     *int64     `json:"watched_dir_id"`
 	Status           string     `json:"status"`
 	ModifiedAt       time.Time  `json:"modified_at"`
 	IndexedAt        *time.Time `json:"indexed_at"`
 	ContentIndexedAt *time.Time `json:"content_indexed_at"`
 }
 
+const fileColumns = `id, path, name, extension, mime_type, size, parent_dir, watched_dir_id, status, modified_at, indexed_at, content_indexed_at`
+
+func scanFile(scanner interface{ Scan(...any) error }, f *File) error {
+	return scanner.Scan(&f.ID, &f.Path, &f.Name, &f.Extension, &f.MimeType, &f.Size, &f.ParentDir, &f.WatchedDirID, &f.Status, &f.ModifiedAt, &f.IndexedAt, &f.ContentIndexedAt)
+}
+
 type FileFilter struct {
-	Extension *string
-	Status    *string
-	TagID     *int64
-	ParentDir *string
-	Limit     int
-	Offset    int
+	Extension    *string
+	Status       *string
+	TagID        *int64
+	ParentDir    *string
+	WatchedDirID *int64
+	Limit        int
+	Offset       int
 }
 
 func (s *Store) ListFiles(f FileFilter) ([]File, error) {
-	query := `SELECT id, path, name, extension, mime_type, size, parent_dir, status, modified_at, indexed_at, content_indexed_at FROM files`
+	query := `SELECT ` + fileColumns + ` FROM files`
 	var args []any
 	var conditions []string
 
@@ -48,6 +56,10 @@ func (s *Store) ListFiles(f FileFilter) ([]File, error) {
 	if f.TagID != nil {
 		conditions = append(conditions, "id IN (SELECT file_id FROM file_tags WHERE tag_id = ?)")
 		args = append(args, *f.TagID)
+	}
+	if f.WatchedDirID != nil {
+		conditions = append(conditions, "watched_dir_id = ?")
+		args = append(args, *f.WatchedDirID)
 	}
 
 	if len(conditions) > 0 {
@@ -74,7 +86,7 @@ func (s *Store) ListFiles(f FileFilter) ([]File, error) {
 	var files []File
 	for rows.Next() {
 		var f File
-		if err := rows.Scan(&f.ID, &f.Path, &f.Name, &f.Extension, &f.MimeType, &f.Size, &f.ParentDir, &f.Status, &f.ModifiedAt, &f.IndexedAt, &f.ContentIndexedAt); err != nil {
+		if err := scanFile(rows, &f); err != nil {
 			return nil, err
 		}
 		files = append(files, f)
@@ -84,8 +96,9 @@ func (s *Store) ListFiles(f FileFilter) ([]File, error) {
 
 func (s *Store) GetFile(id int64) (*File, error) {
 	var f File
-	err := s.db.QueryRow(`SELECT id, path, name, extension, mime_type, size, parent_dir, status, modified_at, indexed_at, content_indexed_at FROM files WHERE id = ?`, id).
-		Scan(&f.ID, &f.Path, &f.Name, &f.Extension, &f.MimeType, &f.Size, &f.ParentDir, &f.Status, &f.ModifiedAt, &f.IndexedAt, &f.ContentIndexedAt)
+	err := s.db.QueryRow(`SELECT `+fileColumns+` FROM files WHERE id = ?`, id).Scan(
+		&f.ID, &f.Path, &f.Name, &f.Extension, &f.MimeType, &f.Size, &f.ParentDir, &f.WatchedDirID, &f.Status, &f.ModifiedAt, &f.IndexedAt, &f.ContentIndexedAt,
+	)
 	if err == sql.ErrNoRows {
 		return nil, nil
 	}
@@ -94,8 +107,9 @@ func (s *Store) GetFile(id int64) (*File, error) {
 
 func (s *Store) GetFileByPath(path string) (*File, error) {
 	var f File
-	err := s.db.QueryRow(`SELECT id, path, name, extension, mime_type, size, parent_dir, status, modified_at, indexed_at, content_indexed_at FROM files WHERE path = ?`, path).
-		Scan(&f.ID, &f.Path, &f.Name, &f.Extension, &f.MimeType, &f.Size, &f.ParentDir, &f.Status, &f.ModifiedAt, &f.IndexedAt, &f.ContentIndexedAt)
+	err := s.db.QueryRow(`SELECT `+fileColumns+` FROM files WHERE path = ?`, path).Scan(
+		&f.ID, &f.Path, &f.Name, &f.Extension, &f.MimeType, &f.Size, &f.ParentDir, &f.WatchedDirID, &f.Status, &f.ModifiedAt, &f.IndexedAt, &f.ContentIndexedAt,
+	)
 	if err == sql.ErrNoRows {
 		return nil, nil
 	}
@@ -104,8 +118,8 @@ func (s *Store) GetFileByPath(path string) (*File, error) {
 
 func (s *Store) CreateFile(f *File) (*File, error) {
 	result, err := s.db.Exec(
-		`INSERT INTO files (path, name, extension, mime_type, size, parent_dir, status, modified_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-		f.Path, f.Name, f.Extension, f.MimeType, f.Size, f.ParentDir, f.Status, f.ModifiedAt,
+		`INSERT INTO files (path, name, extension, mime_type, size, parent_dir, watched_dir_id, status, modified_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		f.Path, f.Name, f.Extension, f.MimeType, f.Size, f.ParentDir, f.WatchedDirID, f.Status, f.ModifiedAt,
 	)
 	if err != nil {
 		return nil, err
@@ -131,8 +145,8 @@ func (s *Store) UpsertFile(f *File) (*File, error) {
 
 	if !existing.ModifiedAt.Equal(f.ModifiedAt) {
 		_, err = s.db.Exec(
-			`UPDATE files SET name = ?, extension = ?, mime_type = ?, size = ?, parent_dir = ?, status = 'active', modified_at = ?, content_indexed_at = NULL WHERE id = ?`,
-			f.Name, f.Extension, f.MimeType, f.Size, f.ParentDir, f.ModifiedAt, existing.ID,
+			`UPDATE files SET name = ?, extension = ?, mime_type = ?, size = ?, parent_dir = ?, watched_dir_id = ?, status = 'active', modified_at = ?, content_indexed_at = NULL WHERE id = ?`,
+			f.Name, f.Extension, f.MimeType, f.Size, f.ParentDir, f.WatchedDirID, f.ModifiedAt, existing.ID,
 		)
 		if err != nil {
 			return nil, err
@@ -142,6 +156,44 @@ func (s *Store) UpsertFile(f *File) (*File, error) {
 	}
 
 	return s.GetFile(existing.ID)
+}
+
+func (s *Store) ListFilesByDir(dirID int64) ([]File, error) {
+	rows, err := s.db.Query(`SELECT `+fileColumns+` FROM files WHERE watched_dir_id = ? ORDER BY name`, dirID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var files []File
+	for rows.Next() {
+		var f File
+		if err := scanFile(rows, &f); err != nil {
+			return nil, err
+		}
+		files = append(files, f)
+	}
+	return files, rows.Err()
+}
+
+func (s *Store) DeleteFilesByDir(dirID int64) error {
+	tx, err := s.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	_, err = tx.Exec(`DELETE FROM files_fts WHERE file_id IN (SELECT id FROM files WHERE watched_dir_id = ?)`, dirID)
+	if err != nil {
+		return err
+	}
+
+	_, err = tx.Exec(`DELETE FROM files WHERE watched_dir_id = ?`, dirID)
+	if err != nil {
+		return err
+	}
+
+	return tx.Commit()
 }
 
 func (s *Store) MarkMissingInDirs(parentDirs []string, seenPaths []string) error {

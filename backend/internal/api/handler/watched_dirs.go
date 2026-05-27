@@ -96,9 +96,30 @@ func (h *WatchedDirHandler) Delete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := h.store.DeleteWatchedDir(id); err != nil {
+	if err := h.store.DeleteWatchedDirAndFiles(id); err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
+}
+
+func (h *WatchedDirHandler) Scan(w http.ResponseWriter, r *http.Request) {
+	id, ok := parsePathID(w, r, "id")
+	if !ok {
+		return
+	}
+
+	dir, err := h.store.GetWatchedDir(id)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	if dir == nil {
+		writeError(w, http.StatusNotFound, "watched directory not found")
+		return
+	}
+
+	go h.scanner.Scan(context.Background(), dir.Path, dir.Recursive, dir.ID)
+
+	writeJSON(w, http.StatusAccepted, dir)
 }

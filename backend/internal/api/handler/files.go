@@ -84,3 +84,20 @@ func (h *FileHandler) Get(w http.ResponseWriter, r *http.Request) {
 
 	writeJSON(w, http.StatusOK, result)
 }
+
+func (h *FileHandler) ListByDir(w http.ResponseWriter, r *http.Request) {
+	id, ok := parsePathID(w, r, "id")
+	if !ok {
+		return
+	}
+
+	files, err := h.store.ListFilesByDir(id)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	if files == nil {
+		files = []store.File{}
+	}
+	writeJSON(w, http.StatusOK, files)
+}

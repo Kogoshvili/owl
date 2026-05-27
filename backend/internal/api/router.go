@@ -26,9 +26,11 @@ func NewRouter(s *store.Store, sc *scanner.Scanner) http.Handler {
 	mux.HandleFunc("POST /watched-directories", wdh.Create)
 	mux.HandleFunc("PATCH /watched-directories/{id}", wdh.Update)
 	mux.HandleFunc("DELETE /watched-directories/{id}", wdh.Delete)
+	mux.HandleFunc("POST /watched-directories/{id}/scan", wdh.Scan)
 
 	mux.HandleFunc("GET /files", fh.List)
 	mux.HandleFunc("GET /files/{id}", fh.Get)
+	mux.HandleFunc("GET /watched-directories/{id}/files", fh.ListByDir)
 
 	mux.HandleFunc("PUT /files/{id}/comment", ch.Upsert)
 	mux.HandleFunc("DELETE /files/{id}/comment", ch.Delete)

@@ -66,6 +66,31 @@ func (s *Store) DeleteWatchedDir(id int64) error {
 	return err
 }
 
+func (s *Store) DeleteWatchedDirAndFiles(id int64) error {
+	tx, err := s.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	_, err = tx.Exec(`DELETE FROM files_fts WHERE file_id IN (SELECT id FROM files WHERE watched_dir_id = ?)`, id)
+	if err != nil {
+		return err
+	}
+
+	_, err = tx.Exec(`DELETE FROM files WHERE watched_dir_id = ?`, id)
+	if err != nil {
+		return err
+	}
+
+	_, err = tx.Exec(`DELETE FROM watched_directories WHERE id = ?`, id)
+	if err != nil {
+		return err
+	}
+
+	return tx.Commit()
+}
+
 func (s *Store) UpdateLastScanned(id int64) error {
 	_, err := s.db.Exec(`UPDATE watched_directories SET last_scanned_at = CURRENT_TIMESTAMP WHERE id = ?`, id)
 	return err

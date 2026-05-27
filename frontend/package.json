@@ -12,8 +12,10 @@
     "tauri:build": "tauri build"
   },
   "dependencies": {
+    "@tanstack/preact-query": "^5.100.14",
     "@tauri-apps/api": "^2.11.0",
-    "preact": "^10.29.1"
+    "preact": "^10.29.1",
+    "preact-router": "^4.1.2"
   },
   "devDependencies": {
     "@preact/preset-vite": "^2.10.5",

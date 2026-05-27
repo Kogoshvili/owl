@@ -56,14 +56,15 @@ func (sc *Scanner) Scan(ctx context.Context, dirPath string, recursive bool, wat
 		mimeType := detectMIME(name, ext)
 
 		f := &store.File{
-			Path:       path,
-			Name:       name,
-			Extension:  ext,
-			MimeType:   mimeType,
-			Size:       info.Size(),
-			ParentDir:  parentDir,
-			Status:     "active",
-			ModifiedAt: info.ModTime(),
+			Path:         path,
+			Name:         name,
+			Extension:    ext,
+			MimeType:     mimeType,
+			Size:         info.Size(),
+			ParentDir:    parentDir,
+			WatchedDirID: &watchedDirID,
+			Status:       "active",
+			ModifiedAt:   info.ModTime(),
 		}
 
 		if _, err := sc.store.UpsertFile(f); err != nil {
