@@ -1,8 +1,7 @@
 package main
 
 import (
-	"fmt"
-	"log"
+	"log/slog"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -10,19 +9,28 @@ import (
 	"owl/internal/api"
 	"owl/internal/db"
 	"owl/internal/extractor"
+	"owl/internal/logging"
 	"owl/internal/scanner"
 	"owl/internal/store"
 )
 
 func main() {
+	logLevel := os.Getenv("LOG_LEVEL")
+	if logLevel == "" {
+		logLevel = "info"
+	}
+	logging.Init(logLevel)
+
 	dataDir, err := ensureDataDir()
 	if err != nil {
-		log.Fatalf("failed to create data directory: %v", err)
+		slog.Error("failed to create data directory", "error", err)
+		os.Exit(1)
 	}
 
 	database, err := db.Init(filepath.Join(dataDir, "owl.db"))
 	if err != nil {
-		log.Fatalf("failed to initialize database: %v", err)
+		slog.Error("failed to initialize database", "error", err)
+		os.Exit(1)
 	}
 	defer database.Close()
 
@@ -32,8 +40,11 @@ func main() {
 	ext := extractor.New(s)
 	router := api.NewRouter(s, sc, ext)
 	addr := ":3721"
-	fmt.Printf("Owl backend listening on %s\n", addr)
-	log.Fatal(http.ListenAndServe(addr, router))
+	slog.Info("starting server", "addr", addr)
+	if err := http.ListenAndServe(addr, router); err != nil {
+		slog.Error("server failed", "error", err)
+		os.Exit(1)
+	}
 }
 
 func ensureDataDir() (string, error) {

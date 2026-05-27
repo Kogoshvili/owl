@@ -2,6 +2,7 @@ package intelligence
 
 import (
 	"database/sql"
+	"log/slog"
 	"math"
 	"regexp"
 	"strings"
@@ -145,10 +146,10 @@ func (a *Analyzer) GetFileKeywords(fileID int64, topN int) ([]Keyword, error) {
 func (a *Analyzer) BuildCorpusTFIDF(fileIDs []int64) (map[int64][]Keyword, error) {
 	result := make(map[int64][]Keyword)
 	termDocFreq := make(map[string]int)
-
 	fileKeywordsMap := make(map[int64]map[string]int)
 
-	for _, fileID := range fileIDs {
+	slog.Info("build-corpus: fetching keywords", "files", len(fileIDs))
+	for i, fileID := range fileIDs {
 		keywords, err := a.GetFileKeywords(fileID, 100)
 		if err != nil {
 			return nil, err
@@ -161,6 +162,10 @@ func (a *Analyzer) BuildCorpusTFIDF(fileIDs []int64) (map[int64][]Keyword, error
 		}
 
 		fileKeywordsMap[fileID] = keywordMap
+
+		if (i+1)%50 == 0 || i == len(fileIDs)-1 {
+			slog.Info("build-corpus: progress", "files", i+1, "total", len(fileIDs), "unique_terms_so_far", len(termDocFreq))
+		}
 	}
 
 	totalDocs := len(fileIDs)
@@ -182,6 +187,8 @@ func (a *Analyzer) BuildCorpusTFIDF(fileIDs []int64) (map[int64][]Keyword, error
 
 		result[fileID] = topKeywords(keywords, 20)
 	}
+
+	slog.Info("build-corpus: complete", "files", totalDocs, "unique_terms", len(termDocFreq))
 
 	return result, nil
 }

@@ -1,5 +1,5 @@
 import { useState } from "preact/hooks"
-import { useTags, useTagFilesList } from "../hooks/queries"
+import { useTags, useTagFilesList, useAcceptTag, useDeleteTag } from "../hooks/queries"
 import { route } from "preact-router"
 import type { FilterState } from "../components/file-list"
 import type { File } from "../api"
@@ -26,6 +26,19 @@ export function TagDetailPage({ id }: { id?: string }) {
 
   const filesQuery = useTagFilesList(tagId, filters)
 
+  const acceptMutation = useAcceptTag()
+  const deleteMutation = useDeleteTag()
+
+  const handleAccept = () => {
+    acceptMutation.mutate(tagId)
+  }
+
+  const handleDismiss = () => {
+    deleteMutation.mutate(tagId, {
+      onSuccess: () => route("/tags"),
+    })
+  }
+
   if (tagsQuery.isLoading) return <div class="page"><div class="empty">Loading...</div></div>
   if (!tag) return <div class="page"><div class="empty">Tag not found</div></div>
 
@@ -44,6 +57,16 @@ export function TagDetailPage({ id }: { id?: string }) {
           </span>
         </div>
         <div class="tag-detail-meta">{tag.file_count} file{tag.file_count !== 1 ? "s" : ""}</div>
+        {tag.source === "auto" && (
+          <div class="tag-detail-actions">
+            <button class="btn btn-sm btn-primary" onClick={handleAccept} disabled={acceptMutation.isPending}>
+              {acceptMutation.isPending ? "Accepting..." : "Accept"}
+            </button>
+            <button class="btn btn-sm btn-danger" onClick={handleDismiss} disabled={deleteMutation.isPending}>
+              {deleteMutation.isPending ? "Dismissing..." : "Dismiss"}
+            </button>
+          </div>
+        )}
       </div>
 
       <div class="tag-files-section">

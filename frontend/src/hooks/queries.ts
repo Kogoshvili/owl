@@ -216,10 +216,10 @@ export function useRemoveFileTag() {
   })
 }
 
-export function useVirtualFolders() {
+export function useVirtualFolders(source?: "auto" | "manual") {
   return useQuery({
-    queryKey: ["virtualFolders"],
-    queryFn: getVirtualFolders,
+    queryKey: ["virtualFolders", source],
+    queryFn: () => getVirtualFolders(source),
   })
 }
 

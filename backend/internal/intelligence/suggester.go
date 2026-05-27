@@ -2,8 +2,10 @@ package intelligence
 
 import (
 	"fmt"
+	"log/slog"
 	"owl/internal/store"
 	"sort"
+	"time"
 )
 
 // MinFilesForFolder is the minimum number of files a virtual folder must contain
@@ -39,34 +41,48 @@ func (s *Suggester) SuggestVirtualFolders(minFiles int, minSimilarity float64) (
 		minSimilarity = 0.3
 	}
 
+	slog.Info("suggester: starting", "min_files", minFiles, "min_similarity", minSimilarity)
+
 	fileIDs, err := s.analyzer.GetProcessedFiles(500)
 	if err != nil {
 		return nil, err
 	}
 
 	if len(fileIDs) < minFiles {
+		slog.Info("suggester: not enough processed files", "count", len(fileIDs), "min_required", minFiles)
 		return []Suggestion{}, nil
 	}
 
+	slog.Info("suggester: building TF-IDF corpus", "files", len(fileIDs))
 	corpusKeywords, err := s.analyzer.BuildCorpusTFIDF(fileIDs)
 	if err != nil {
 		return nil, err
 	}
 
+	slog.Info("suggester: computing similarity matrix", "pairs", len(fileIDs)*(len(fileIDs)-1)/2)
+	start := time.Now()
 	similarityMatrix := make(map[[2]int64]float64)
+	pairCount := 0
 	for i, id1 := range fileIDs {
 		for _, id2 := range fileIDs[i+1:] {
 			sim, err := s.analyzer.CalculateFileSimilarity(id1, id2)
 			if err != nil {
 				continue
 			}
+			pairCount++
 			if sim >= minSimilarity {
 				similarityMatrix[[2]int64{id1, id2}] = sim
 			}
 		}
+		if (i+1)%50 == 0 || i == len(fileIDs)-1 {
+			slog.Info("suggester: similarity progress", "files", i+1, "total", len(fileIDs), "similar_pairs", len(similarityMatrix))
+		}
 	}
+	slog.Info("suggester: similarity matrix complete", "pairs_compared", pairCount, "similar_pairs", len(similarityMatrix), "elapsed", time.Since(start).String())
 
+	slog.Info("suggester: clustering files")
 	clusters := s.clusterFiles(fileIDs, similarityMatrix, minSimilarity, minFiles)
+	slog.Info("suggester: clusters found", "clusters", len(clusters))
 
 	fileNames, err := s.analyzer.GetFileNames(fileIDs)
 	if err != nil {
@@ -85,7 +101,6 @@ func (s *Suggester) SuggestVirtualFolders(minFiles int, minSimilarity float64) (
 		}
 
 		preview := s.getFilePreview(cluster, fileNames)
-
 		score := s.calculateClusterScore(cluster, similarityMatrix)
 
 		suggestions = append(suggestions, Suggestion{
@@ -103,6 +118,8 @@ func (s *Suggester) SuggestVirtualFolders(minFiles int, minSimilarity float64) (
 		}
 		return len(suggestions[i].FileIDs) > len(suggestions[j].FileIDs)
 	})
+
+	slog.Info("suggester: complete", "suggestions", len(suggestions))
 
 	return suggestions, nil
 }
@@ -237,5 +254,6 @@ func (s *Suggester) CreateFolderFromSuggestion(suggestion Suggestion) (*store.Vi
 		return nil, err
 	}
 
+	slog.Info("suggester: created folder from suggestion", "name", suggestion.Name, "files", len(suggestion.FileIDs))
 	return folder, nil
 }

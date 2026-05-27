@@ -35,7 +35,12 @@ type materializeRequest struct {
 }
 
 func (h *VirtualFolderHandler) List(w http.ResponseWriter, r *http.Request) {
-	folders, err := h.store.ListVirtualFolders()
+	source := r.URL.Query().Get("source")
+	var sourcePtr *string
+	if source != "" {
+		sourcePtr = &source
+	}
+	folders, err := h.store.ListVirtualFolders(sourcePtr)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return

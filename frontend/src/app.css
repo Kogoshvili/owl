@@ -1292,17 +1292,6 @@ tbody tr:hover {
   margin: 0;
 }
 
-.tags-header-right {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
-.tags-source-pills {
-  display: flex;
-  gap: 4px;
-}
-
 .auto-tag-result {
   display: flex;
   align-items: center;
@@ -1585,4 +1574,68 @@ tbody tr:hover {
     border-top: 1px solid var(--border);
     max-height: 50vh;
   }
+}
+
+/* Tag Suggestions Sidebar */
+.tag-suggestions h2 {
+  margin: 0 0 12px;
+}
+
+.tag-suggestions-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.tag-suggestions-header h2 {
+  margin: 0;
+}
+
+.tag-suggestions-actions {
+  display: flex;
+  gap: 6px;
+}
+
+.tag-suggestion-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.tag-suggestion-card {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 12px 14px;
+  cursor: pointer;
+  transition: border-color 0.15s;
+}
+
+.tag-suggestion-card:hover {
+  border-color: var(--text);
+}
+
+.tag-suggestion-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.tag-suggestion-name {
+  font-weight: 600;
+  color: var(--text-h);
+}
+
+.tag-suggestion-count {
+  color: var(--text);
+  font-size: 0.75rem;
+  opacity: 0.6;
+  flex-shrink: 0;
+}
+
+.tag-suggestion-actions {
+  display: flex;
+  gap: 6px;
 }

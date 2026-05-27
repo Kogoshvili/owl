@@ -2,10 +2,12 @@ package handler
 
 import (
 	"encoding/json"
+	"log/slog"
 	"net/http"
 	"owl/internal/intelligence"
 	"owl/internal/store"
 	"strconv"
+	"time"
 )
 
 type IntelligenceHandler struct {
@@ -72,6 +74,8 @@ func (h *IntelligenceHandler) TagFiles(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	slog.Info("auto-tagging files", "count", len(files))
+
 	fileIDs := make([]int64, len(files))
 	for i, f := range files {
 		fileIDs[i] = f.ID
@@ -87,6 +91,8 @@ func (h *IntelligenceHandler) TagFiles(w http.ResponseWriter, r *http.Request) {
 	for _, tags := range result {
 		tagCount += len(tags)
 	}
+
+	slog.Info("auto-tag complete", "files", len(files), "tagged", len(result), "tags_created", tagCount)
 
 	writeJSON(w, http.StatusOK, map[string]any{
 		"count":     len(files),
@@ -112,6 +118,8 @@ func (h *IntelligenceHandler) TagWatchedDir(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
+	slog.Info("auto-tagging watched dir", "dir_id", dirID, "count", len(files))
+
 	fileIDs := make([]int64, len(files))
 	for i, f := range files {
 		fileIDs[i] = f.ID
@@ -128,6 +136,8 @@ func (h *IntelligenceHandler) TagWatchedDir(w http.ResponseWriter, r *http.Reque
 		tagCount += len(tags)
 	}
 
+	slog.Info("auto-tag dir complete", "dir_id", dirID, "files", len(files), "tagged", len(result), "tags_created", tagCount)
+
 	writeJSON(w, http.StatusOK, map[string]any{
 		"count":     len(files),
 		"tagged":    len(result),
@@ -136,7 +146,8 @@ func (h *IntelligenceHandler) TagWatchedDir(w http.ResponseWriter, r *http.Reque
 }
 
 func (h *IntelligenceHandler) ListFolderSuggestions(w http.ResponseWriter, r *http.Request) {
-	folders, err := h.store.ListVirtualFolders()
+	autoSource := "auto"
+	folders, err := h.store.ListVirtualFolders(&autoSource)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
@@ -144,27 +155,25 @@ func (h *IntelligenceHandler) ListFolderSuggestions(w http.ResponseWriter, r *ht
 
 	suggestions := make(map[string]any)
 	for _, f := range folders {
-		if f.Source == "auto" {
-			detail, err := h.store.GetVirtualFolderDetail(f.ID)
-			if err != nil {
-				continue
+		detail, err := h.store.GetVirtualFolderDetail(f.ID)
+		if err != nil {
+			continue
+		}
+		preview := make([]string, 0, 5)
+		for i, file := range detail.Files {
+			if i >= 5 {
+				break
 			}
-			preview := make([]string, 0, 5)
-			for i, file := range detail.Files {
-				if i >= 5 {
-					break
-				}
-				preview = append(preview, file.Name)
-			}
+			preview = append(preview, file.Name)
+		}
 
-			suggestions[strconv.FormatInt(f.ID, 10)] = map[string]any{
-				"id":          f.ID,
-				"name":        f.Name,
-				"description": f.Description,
-				"file_count":  len(detail.Files),
-				"preview":     preview,
-				"created_at":  f.CreatedAt,
-			}
+		suggestions[strconv.FormatInt(f.ID, 10)] = map[string]any{
+			"id":          f.ID,
+			"name":        f.Name,
+			"description": f.Description,
+			"file_count":  len(detail.Files),
+			"preview":     preview,
+			"created_at":  f.CreatedAt,
 		}
 	}
 
@@ -185,7 +194,6 @@ func (h *IntelligenceHandler) GenerateSuggestions(w http.ResponseWriter, r *http
 		return
 	}
 
-	// Use the default threshold from the suggester package
 	minFiles := intelligence.MinFilesForFolder
 	if req.MinFiles != nil && *req.MinFiles > 0 {
 		minFiles = *req.MinFiles
@@ -195,6 +203,9 @@ func (h *IntelligenceHandler) GenerateSuggestions(w http.ResponseWriter, r *http
 	if req.MinSimilarity != nil && *req.MinSimilarity > 0 {
 		minSimilarity = *req.MinSimilarity
 	}
+
+	slog.Info("generating folder suggestions", "min_files", minFiles, "min_similarity", minSimilarity)
+	start := time.Now()
 
 	suggestions, err := h.suggester.SuggestVirtualFolders(minFiles, minSimilarity)
 	if err != nil {
@@ -227,6 +238,8 @@ func (h *IntelligenceHandler) GenerateSuggestions(w http.ResponseWriter, r *http
 		}
 		created = append(created, *folder)
 	}
+
+	slog.Info("folder suggestions generated", "suggestions", len(suggestions), "created", len(created), "elapsed", time.Since(start).String())
 
 	writeJSON(w, http.StatusOK, map[string]any{"created": created})
 }

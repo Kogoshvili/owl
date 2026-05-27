@@ -3,7 +3,7 @@ package store
 import (
 	"database/sql"
 	"encoding/json"
-	"log"
+	"log/slog"
 	"strings"
 	"time"
 )
@@ -297,7 +297,11 @@ func (s *Store) QueueFilesForExtraction(dirID int64) (int64, error) {
 	if err != nil {
 		return 0, err
 	}
-	return result.RowsAffected()
+	n, _ := result.RowsAffected()
+	if n > 0 {
+		slog.Info("queued files for extraction", "dir_id", dirID, "count", n)
+	}
+	return n, nil
 }
 
 func (s *Store) QueueFileForExtraction(fileID int64) error {
@@ -357,7 +361,7 @@ func (s *Store) RecoverStuckFiles() {
 	}
 	n, _ := result.RowsAffected()
 	if n > 0 {
-		log.Printf("recovered %d stuck files (queued/processing → failed)", n)
+		slog.Warn("recovered stuck files", "count", n)
 	}
 }
 

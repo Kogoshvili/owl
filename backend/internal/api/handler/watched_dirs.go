@@ -3,6 +3,7 @@ package handler
 import (
 	"context"
 	"encoding/json"
+	"log/slog"
 	"net/http"
 
 	"owl/internal/extractor"
@@ -63,6 +64,7 @@ func (h *WatchedDirHandler) Create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	slog.Info("starting background scan", "dir", dir.Path, "dir_id", dir.ID)
 	go h.scanner.Scan(context.Background(), dir.Path, dir.Recursive, dir.ID)
 
 	writeJSON(w, http.StatusCreated, dir)
@@ -121,6 +123,7 @@ func (h *WatchedDirHandler) Scan(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	slog.Info("starting background scan", "dir", dir.Path, "dir_id", dir.ID)
 	go h.scanner.Scan(context.Background(), dir.Path, dir.Recursive, dir.ID)
 
 	writeJSON(w, http.StatusAccepted, dir)
@@ -149,6 +152,7 @@ func (h *WatchedDirHandler) Extract(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if queued > 0 {
+		slog.Info("starting background extraction", "dir_id", id, "queued", queued)
 		go h.extractor.ProcessAll(context.Background())
 	}
 

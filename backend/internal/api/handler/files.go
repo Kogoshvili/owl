@@ -2,6 +2,7 @@ package handler
 
 import (
 	"context"
+	"log/slog"
 	"net/http"
 	"os"
 	"strconv"
@@ -254,6 +255,7 @@ func (h *FileHandler) Extract(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	slog.Info("starting background extraction", "file_id", id)
 	go h.extractor.ProcessAll(context.Background())
 
 	writeJSON(w, http.StatusAccepted, map[string]string{"status": "queued"})

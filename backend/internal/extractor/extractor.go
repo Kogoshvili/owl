@@ -4,9 +4,10 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"log"
+	"log/slog"
 	"os"
 	"strings"
+	"time"
 
 	"owl/internal/store"
 )
@@ -46,6 +47,10 @@ func IsSupported(ext string) bool {
 }
 
 func (e *Extractor) ProcessAll(ctx context.Context) error {
+	start := time.Now()
+	processed := 0
+	slog.Info("extractor: starting ProcessAll")
+
 	for {
 		if ctx.Err() != nil {
 			return ctx.Err()
@@ -55,7 +60,12 @@ func (e *Extractor) ProcessAll(ctx context.Context) error {
 			return err
 		}
 		if !didProcess {
+			slog.Info("extractor: complete", "processed", processed, "elapsed", time.Since(start).String())
 			return nil
+		}
+		processed++
+		if processed%100 == 0 {
+			slog.Info("extractor: progress", "processed", processed)
 		}
 	}
 }
@@ -63,24 +73,24 @@ func (e *Extractor) ProcessAll(ctx context.Context) error {
 func (e *Extractor) ProcessNext(ctx context.Context) (bool, error) {
 	file, err := e.store.GetNextQueuedFile()
 	if err != nil {
-		return false, fmt.Errorf("get next queued file: %w", err)
+		return false, err
 	}
 	if file == nil {
 		return false, nil
 	}
 
 	if err := e.store.SetFileProcessing(file.ID); err != nil {
-		return false, fmt.Errorf("set file processing: %w", err)
+		return false, err
 	}
 
 	if file.Size > maxFileSize {
-		e.store.SetFileFailed(file.ID, fmt.Sprintf("file too large (%d bytes, max %d)", file.Size, maxFileSize))
+		e.store.SetFileFailed(file.ID, "file too large")
 		return true, nil
 	}
 
 	text, err := e.extract(ctx, file)
 	if err != nil {
-		log.Printf("extractor: failed to extract %s: %v", file.Path, err)
+		slog.Warn("extractor: failed to extract", "path", file.Path, "error", err)
 		e.store.SetFileFailed(file.ID, truncateString(err.Error(), 500))
 		return true, nil
 	}
@@ -88,7 +98,7 @@ func (e *Extractor) ProcessNext(ctx context.Context) (bool, error) {
 	metadata := extractMetadata(file)
 	if len(metadata) > 0 {
 		if err := e.store.SetFileMetadata(file.ID, metadata); err != nil {
-			log.Printf("extractor: failed to set metadata for %s: %v", file.Path, err)
+			slog.Warn("extractor: failed to set metadata", "path", file.Path, "error", err)
 		}
 	}
 
@@ -98,15 +108,16 @@ func (e *Extractor) ProcessNext(ctx context.Context) (bool, error) {
 	}
 
 	if err := e.store.UpsertFileFTS(file.ID, file.Name, file.Extension, text); err != nil {
-		log.Printf("extractor: failed to upsert FTS for %s: %v", file.Path, err)
+		slog.Warn("extractor: failed to upsert FTS", "path", file.Path, "error", err)
 		e.store.SetFileFailed(file.ID, truncateString(err.Error(), 500))
 		return true, nil
 	}
 
 	if err := e.store.SetFileProcessed(file.ID); err != nil {
-		log.Printf("extractor: failed to set processed for %s: %v", file.Path, err)
+		slog.Warn("extractor: failed to set processed", "path", file.Path, "error", err)
 	}
 
+	slog.Debug("extractor: processed file", "path", file.Path, "name", file.Name, "size", file.Size)
 	return true, nil
 }
 

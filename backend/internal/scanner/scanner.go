@@ -4,9 +4,10 @@ import (
 	"context"
 	"fmt"
 	"io/fs"
-	"log"
+	"log/slog"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"owl/internal/store"
 )
@@ -20,8 +21,12 @@ func New(s *store.Store) *Scanner {
 }
 
 func (sc *Scanner) Scan(ctx context.Context, dirPath string, recursive bool, watchedDirID int64) error {
+	start := time.Now()
+	slog.Info("scanner: starting", "dir", dirPath, "recursive", recursive)
+
 	var seenPaths []string
 	var parentDirs = map[string]bool{}
+	var fileCount int
 
 	err := filepath.WalkDir(dirPath, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
@@ -68,11 +73,15 @@ func (sc *Scanner) Scan(ctx context.Context, dirPath string, recursive bool, wat
 		}
 
 		if _, err := sc.store.UpsertFile(f); err != nil {
-			log.Printf("scanner: failed to upsert file %s: %v", path, err)
+			slog.Warn("scanner: failed to upsert file", "path", path, "error", err)
 			return nil
 		}
 
 		seenPaths = append(seenPaths, path)
+		fileCount++
+		if fileCount%500 == 0 {
+			slog.Info("scanner: progress", "files", fileCount)
+		}
 		return nil
 	})
 
@@ -86,18 +95,18 @@ func (sc *Scanner) Scan(ctx context.Context, dirPath string, recursive bool, wat
 	}
 
 	if err := sc.store.MarkMissingInDirs(dirList, seenPaths); err != nil {
-		log.Printf("scanner: failed to mark missing files: %v", err)
+		slog.Warn("scanner: failed to mark missing files", "error", err)
 	}
 
 	if err := sc.store.SetScanned(seenPaths); err != nil {
-		log.Printf("scanner: failed to set scanned: %v", err)
+		slog.Warn("scanner: failed to set scanned", "error", err)
 	}
 
 	if err := sc.store.UpdateLastScanned(watchedDirID); err != nil {
-		log.Printf("scanner: failed to update last_scanned_at: %v", err)
+		slog.Warn("scanner: failed to update last_scanned_at", "error", err)
 	}
 
-	log.Printf("scanner: completed scan of %s, found %d files", dirPath, len(seenPaths))
+	slog.Info("scanner: complete", "dir", dirPath, "files", fileCount, "elapsed", time.Since(start).String())
 	return nil
 }
 

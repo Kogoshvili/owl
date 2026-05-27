@@ -1,6 +1,7 @@
 package intelligence
 
 import (
+	"log/slog"
 	"owl/internal/store"
 	"path/filepath"
 	"strings"
@@ -97,12 +98,14 @@ func (t *Tagger) AutoTagFile(fileID int64) ([]store.Tag, error) {
 }
 
 func (t *Tagger) AutoTagFiles(fileIDs []int64) (map[int64][]store.Tag, error) {
+	slog.Info("auto-tag: starting bulk", "files", len(fileIDs))
+
 	// Collect all tag candidates across all files
 	fileContents := make(map[int64]string)
 	fileData := make(map[int64]*store.File)
 	tagCandidates := make(map[string][]int64) // tagName -> fileIDs
 
-	for _, fileID := range fileIDs {
+	for i, fileID := range fileIDs {
 		file, err := t.store.GetFile(fileID)
 		if err != nil {
 			return nil, err
@@ -130,7 +133,13 @@ func (t *Tagger) AutoTagFiles(fileIDs []int64) (map[int64][]store.Tag, error) {
 		for _, tagName := range tagNames {
 			tagCandidates[tagName] = append(tagCandidates[tagName], fileID)
 		}
+
+		if (i+1)%100 == 0 || i == len(fileIDs)-1 {
+			slog.Info("auto-tag: collecting candidates", "progress", i+1, "total", len(fileIDs))
+		}
 	}
+
+	totalCandidates := len(tagCandidates)
 
 	// Filter: only keep tags with >= minTagFileCount files
 	for name, ids := range tagCandidates {
@@ -138,6 +147,8 @@ func (t *Tagger) AutoTagFiles(fileIDs []int64) (map[int64][]store.Tag, error) {
 			delete(tagCandidates, name)
 		}
 	}
+
+	slog.Info("auto-tag: filtering candidates", "total_candidates", totalCandidates, "passing_threshold", len(tagCandidates))
 
 	// Pass 2: write tags that pass threshold
 	result := make(map[int64][]store.Tag)
@@ -153,6 +164,8 @@ func (t *Tagger) AutoTagFiles(fileIDs []int64) (map[int64][]store.Tag, error) {
 			result[fileID] = append(result[fileID], *tag)
 		}
 	}
+
+	slog.Info("auto-tag: complete", "files_tagged", len(result), "tags_written", len(tagCandidates))
 
 	return result, nil
 }
@@ -241,12 +254,6 @@ func shouldApplyTag(tagName string, fileID int64, st *store.Store, applyThreshol
 	// Tag must have at least (minTagFileCount - 1) other files already
 	// (so including this file, total >= minTagFileCount)
 	return count >= (minTagFileCount - 1)
-}
-
-type fileTagCandidate struct {
-	fileID    int64
-	tagName   string
-	tagSource string
 }
 
 func (t *Tagger) collectTagsFromFile(file *store.File, content string) []string {

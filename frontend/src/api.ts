@@ -174,7 +174,6 @@ export interface VirtualFolder {
   id: number
   name: string
   description: string
-  auto_generated: boolean
   source: string
   materialized: boolean
   materialized_path: string | null
@@ -195,7 +194,6 @@ export interface VirtualFolderDetail {
   id: number
   name: string
   description: string
-  auto_generated: boolean
   source: string
   materialized: boolean
   materialized_path: string | null
@@ -204,8 +202,11 @@ export interface VirtualFolderDetail {
   notes: Note[]
 }
 
-export function getVirtualFolders(): Promise<VirtualFolder[]> {
-  return request<VirtualFolder[]>("/virtual-folders")
+export function getVirtualFolders(source?: string): Promise<VirtualFolder[]> {
+  const p = new URLSearchParams()
+  if (source) p.set("source", source)
+  const qs = p.toString()
+  return request<VirtualFolder[]>(`/virtual-folders${qs ? "?" + qs : ""}`)
 }
 
 export function createVirtualFolder(name: string, description?: string): Promise<VirtualFolder> {

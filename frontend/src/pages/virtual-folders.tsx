@@ -3,7 +3,7 @@ import { VirtualFolders } from "../components/virtual-folders"
 import { FolderSuggestions } from "../components/folder-suggestions"
 
 export function VirtualFoldersPage() {
-  const foldersQuery = useVirtualFolders()
+  const foldersQuery = useVirtualFolders("manual")
   const createMutation = useCreateVirtualFolder()
   const updateMutation = useUpdateVirtualFolder()
   const deleteMutation = useDeleteVirtualFolder()
