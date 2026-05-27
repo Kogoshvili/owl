@@ -2,10 +2,17 @@ package db
 
 import (
 	"database/sql"
+	"embed"
 	"fmt"
 
+	"github.com/golang-migrate/migrate/v4"
+	"github.com/golang-migrate/migrate/v4/database/sqlite"
+	"github.com/golang-migrate/migrate/v4/source/iofs"
 	_ "modernc.org/sqlite"
 )
+
+//go:embed migrations/*.sql
+var migrationsFS embed.FS
 
 func Init(path string) (*sql.DB, error) {
 	database, err := sql.Open("sqlite", path)
@@ -22,60 +29,24 @@ func Init(path string) (*sql.DB, error) {
 }
 
 func runMigrations(db *sql.DB) error {
-	_, err := db.Exec(`
-		CREATE TABLE IF NOT EXISTS files (
-			id INTEGER PRIMARY KEY AUTOINCREMENT,
-			path TEXT NOT NULL UNIQUE,
-			name TEXT NOT NULL,
-			extension TEXT NOT NULL DEFAULT '',
-			size INTEGER NOT NULL DEFAULT 0,
-			modified_at DATETIME NOT NULL,
-			indexed_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
-		);
+	source, err := iofs.New(migrationsFS, "migrations")
+	if err != nil {
+		return fmt.Errorf("create migration source: %w", err)
+	}
 
-		CREATE TABLE IF NOT EXISTS tags (
-			id INTEGER PRIMARY KEY AUTOINCREMENT,
-			name TEXT NOT NULL UNIQUE
-		);
+	driver, err := sqlite.WithInstance(db, &sqlite.Config{})
+	if err != nil {
+		return fmt.Errorf("create migration driver: %w", err)
+	}
 
-		CREATE TABLE IF NOT EXISTS file_tags (
-			file_id INTEGER NOT NULL REFERENCES files(id),
-			tag_id INTEGER NOT NULL REFERENCES tags(id),
-			PRIMARY KEY (file_id, tag_id)
-		);
+	m, err := migrate.NewWithInstance("iofs", source, "sqlite", driver)
+	if err != nil {
+		return fmt.Errorf("create migrator: %w", err)
+	}
 
-		CREATE TABLE IF NOT EXISTS virtual_folders (
-			id INTEGER PRIMARY KEY AUTOINCREMENT,
-			name TEXT NOT NULL,
-			created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
-		);
+	if err := m.Up(); err != nil && err != migrate.ErrNoChange {
+		return fmt.Errorf("apply migrations: %w", err)
+	}
 
-		CREATE TABLE IF NOT EXISTS virtual_folder_files (
-			virtual_folder_id INTEGER NOT NULL REFERENCES virtual_folders(id),
-			file_id INTEGER NOT NULL REFERENCES files(id),
-			PRIMARY KEY (virtual_folder_id, file_id)
-		);
-
-		CREATE TABLE IF NOT EXISTS notes (
-			id INTEGER PRIMARY KEY AUTOINCREMENT,
-			title TEXT NOT NULL,
-			content TEXT NOT NULL DEFAULT '',
-			created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-			updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
-		);
-
-		CREATE TABLE IF NOT EXISTS note_tags (
-			note_id INTEGER NOT NULL REFERENCES notes(id),
-			tag_id INTEGER NOT NULL REFERENCES tags(id),
-			PRIMARY KEY (note_id, tag_id)
-		);
-
-		CREATE TABLE IF NOT EXISTS projects (
-			id INTEGER PRIMARY KEY AUTOINCREMENT,
-			name TEXT NOT NULL,
-			virtual_folder_id INTEGER REFERENCES virtual_folders(id),
-			created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
-		);
-	`)
-	return err
+	return nil
 }

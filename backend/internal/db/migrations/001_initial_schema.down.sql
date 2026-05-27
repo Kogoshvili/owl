@@ -1,0 +1,12 @@
+DROP TABLE IF EXISTS notes_fts;
+DROP TABLE IF EXISTS files_fts;
+DROP TABLE IF EXISTS note_virtual_folders;
+DROP TABLE IF EXISTS notes;
+DROP TABLE IF EXISTS virtual_folder_files;
+DROP TABLE IF EXISTS virtual_folders;
+DROP TABLE IF EXISTS note_tags;
+DROP TABLE IF EXISTS file_tags;
+DROP TABLE IF EXISTS tags;
+DROP TABLE IF EXISTS comments;
+DROP TABLE IF EXISTS files;
+DROP TABLE IF EXISTS watched_directories;

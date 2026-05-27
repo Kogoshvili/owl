@@ -12,7 +12,7 @@ A desktop application for automatic file and note management. Instead of manuall
 
 Owl's identity is a **smart file manager** — not a notes app competing with Obsidian. Notes exist to annotate and enrich your files, not as their own universe.
 
-**v1 (Model C):** Notes are a feature of the file manager. Lightweight markdown editor. Notes attach to files, virtual folders, or projects. You can browse all notes standalone, but the main entry is always through the file context.
+**v1 (Model C):** Notes are a feature of the file manager. Lightweight markdown editor. Notes attach to virtual folders and can be materialized into `.md` files on disk. Comments provide quick per-file annotations. You can browse all notes standalone, but the main entry is always through the file context.
 
 **Future (Model B):** If notes usage grows, notes can split into their own workspace with dedicated features (backlinks, graph view, rich editor) while still sharing the same data model and Projects system. This lets Owl become "Obsidian with files" — a notes app that natively handles PDFs, images, docs alongside markdown.
 
@@ -28,14 +28,18 @@ You have PDFs, docs, images, etc. scattered across folders from past projects. O
 
 **Example:** You've been researching birds in your area. You have some files on your Desktop, others in Downloads. Owl creates a virtual folder called "Bird Research" that shows everything in one view.
 
-### 2. Intelligent Notes
-Owl gives you an interface to create notes, then automatically tags and groups them. Notes can also be linked to virtual folders — if you took notes about birds, they'll show up alongside your files when you open your Bird Research project.
+### 2. Intelligent Notes & Comments
+**Notes** are markdown documents attached to virtual folders — if you took notes about birds, they'll show up alongside your files when you open your Bird Research virtual folder. Notes can be **materialized** into actual `.md` files on disk.
+
+**Comments** are lightweight per-file annotations — quick context or reminders attached to individual files.
 
 ## Core Concepts
 
 - **Virtual Folders** — Collections of related files from across your system, visible only in the Owl interface. No files are actually moved. If a user finds a virtual folder useful, they can **materialize** it — a real folder is created on disk and all the files are moved there.
 - **Tags** — Auto-generated labels that mark files and notes by context or type.
-- **Projects** — A way to merge virtual folders and notes together into one workspace. A project contains both the related files (via virtual folder) and any associated notes.
+- **Comments** — Lightweight per-file annotations for quick context. One comment per file.
+- **Notes** — Markdown documents attached to virtual folders. Can be materialized into actual `.md` files on disk.
+- **Projects** *(v2)* — Workspaces combining multiple virtual folders and notes.
 
 ## Implementation
 
