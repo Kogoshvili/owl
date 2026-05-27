@@ -11,6 +11,7 @@
 - [x] Tauri v2 shell configured
 - [x] Directory scanner (hidden file skipping, watched_dir_id, cascade delete)
 - [x] Content extractor (text, PDF, DOCX, XLSX, PPTX)
+- [x] Change detection — compares modified_at to skip unchanged files (in UpsertFile)
 - [x] Processing status tracking (unprocessed/queued/processing/processed/stale/failed)
 - [x] Recovery of stuck files on startup
 - [x] Unified search across 5 scopes (filenames, content, comments, tags, notes)
@@ -22,38 +23,52 @@
 - [x] Error banner on file detail page
 - [x] Clickable file names in file list and search results
 
-## Next: v1 - Virtual Folders
 
-- [ ] Virtual folders - frontend (backend done)
-  - Create/list/delete folders
-  - Add/remove files to/from folders
-  - View folder contents
+## v1 MVP (current goal)
 
-## v1.1 - Filtering & Pagination
-
+### Polish existing features
 - [ ] File filtering and sorting in file list
   - Filter by extension, status, processing status
   - Sort by name, size, date
 - [ ] Pagination for file lists (currently capped at 200)
 
-## v1.5 - Automation & Batch
+### Virtual folders
+- [ ] Virtual folders - frontend (backend done)
+  - Create/list/delete folders
+  - Add/remove files to/from folders
+  - View folder contents
 
-- [ ] Batch operations - select multiple files, bulk tag/extract/delete
-- [ ] Auto-scan on startup
-- [ ] Directory watching (fsnotify) for real-time file changes
+### Intelligence
+- [ ] Auto-tagger — analyze file names + content, generate tags with source='auto'
+- [ ] Virtual folder suggestions — FTS5 keyword overlap scoring, suggest groupings
 
 ## v2 - Future
 
+### Automation
+- [ ] Batch operations - select multiple files, bulk tag/extract/delete
+- [ ] Auto-scan on startup
+- [ ] Directory watching (fsnotify) for real-time file changes
+- [ ] Background pipeline coordination — scan → extract → tag → suggest
+
+### Intelligence
+- [ ] User feedback loop — confirm/dismiss suggestions, learn from feedback
+
+### Notes & Materialization
 - [ ] Notes - frontend (backend done)
   - Create/edit/delete notes
   - Attach notes to virtual folders
   - Tag notes
+- [ ] Materialization — actually create folder on disk + move/copy files (backend stub exists)
+- [ ] Note materialization — write .md files to disk (backend stub exists)
+
+### Media & Desktop
 - [ ] Image metadata extraction outside extraction pipeline
   - Images aren't in supportedExtensions so never get metadata (dimensions) extracted
   - Need a metadata-only pass for non-text file types
 - [ ] EXIF data extraction for JPEG
 - [ ] Audio/video metadata extraction
 - [ ] Thumbnail generation for images
+- [ ] OCR + AI vision for image content understanding
 - [ ] Tauri desktop integration - system tray, native file dialogs
 - [ ] Projects feature
 
