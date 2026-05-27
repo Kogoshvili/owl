@@ -28,14 +28,13 @@
 - [x] Pagination for file lists (50 per page, server-side)
 - [x] Nav restructure: Ingest (watched dirs + file list), Files (standalone list), Search
 - [x] Removed placeholder pages (watched-dirs, notes)
+- [x] Virtual folders - frontend
+  - Create/list/delete/edit folders
+  - Add/remove files to/from folders (multi-select file picker dialog)
+  - View folder contents (detail page with files + notes placeholder)
+  - Fixed backend ListFolderFiles to return all File columns (processing_status, file_metadata)
 
 ## v1 MVP (in progress)
-
-### Virtual folders (next up)
-- [ ] Virtual folders - frontend (backend done)
-  - Create/list/delete folders
-  - Add/remove files to/from folders
-  - View folder contents
 
 ### Intelligence
 - [ ] Auto-tagger — analyze file names + content, generate tags with source='auto'

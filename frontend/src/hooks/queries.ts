@@ -16,6 +16,13 @@ import {
   removeFileTag,
   listTags,
   getFileExtensions,
+  getVirtualFolders,
+  getVirtualFolderDetail,
+  createVirtualFolder,
+  updateVirtualFolder,
+  deleteVirtualFolder,
+  addFilesToFolder,
+  removeFileFromFolder,
   type SearchScope,
 } from "../api"
 import type { FilterState } from "../components/file-list"
@@ -186,6 +193,73 @@ export function useRemoveFileTag() {
       removeFileTag(fileId, tagId),
     onSuccess: (_data, vars) => {
       qc.invalidateQueries({ queryKey: ["file", vars.fileId] })
+    },
+  })
+}
+
+export function useVirtualFolders() {
+  return useQuery({
+    queryKey: ["virtualFolders"],
+    queryFn: getVirtualFolders,
+  })
+}
+
+export function useVirtualFolderDetail(id: number | null) {
+  return useQuery({
+    queryKey: ["virtualFolder", id],
+    queryFn: () => getVirtualFolderDetail(id!),
+    enabled: id !== null,
+  })
+}
+
+export function useCreateVirtualFolder() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ name, description }: { name: string; description?: string }) =>
+      createVirtualFolder(name, description),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["virtualFolders"] }),
+  })
+}
+
+export function useUpdateVirtualFolder() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id, name, description }: { id: number; name?: string; description?: string }) =>
+      updateVirtualFolder(id, name, description),
+    onSuccess: (_data, vars) => {
+      qc.invalidateQueries({ queryKey: ["virtualFolders"] })
+      qc.invalidateQueries({ queryKey: ["virtualFolder", vars.id] })
+    },
+  })
+}
+
+export function useDeleteVirtualFolder() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (id: number) => deleteVirtualFolder(id),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["virtualFolders"] }),
+  })
+}
+
+export function useAddFilesToFolder() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ folderId, fileIds, source }: { folderId: number; fileIds: number[]; source?: string }) =>
+      addFilesToFolder(folderId, fileIds, source),
+    onSuccess: (_data, vars) => {
+      qc.invalidateQueries({ queryKey: ["virtualFolder", vars.folderId] })
+      qc.invalidateQueries({ queryKey: ["virtualFolders"] })
+    },
+  })
+}
+
+export function useRemoveFileFromFolder() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ folderId, fileId }: { folderId: number; fileId: number }) =>
+      removeFileFromFolder(folderId, fileId),
+    onSuccess: (_data, vars) => {
+      qc.invalidateQueries({ queryKey: ["virtualFolder", vars.folderId] })
     },
   })
 }

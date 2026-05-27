@@ -107,7 +107,7 @@ func (s *Store) RemoveFileFromFolder(folderID, fileID int64) error {
 
 func (s *Store) ListFolderFiles(folderID int64) ([]File, error) {
 	rows, err := s.db.Query(
-		`SELECT f.id, f.path, f.name, f.extension, f.mime_type, f.size, f.parent_dir, f.status, f.modified_at, f.indexed_at, f.content_indexed_at
+		`SELECT f.`+fileColumns+`
 		 FROM files f JOIN virtual_folder_files vff ON f.id = vff.file_id WHERE vff.virtual_folder_id = ? ORDER BY f.name`,
 		folderID,
 	)
@@ -119,7 +119,7 @@ func (s *Store) ListFolderFiles(folderID int64) ([]File, error) {
 	var files []File
 	for rows.Next() {
 		var f File
-		if err := rows.Scan(&f.ID, &f.Path, &f.Name, &f.Extension, &f.MimeType, &f.Size, &f.ParentDir, &f.Status, &f.ModifiedAt, &f.IndexedAt, &f.ContentIndexedAt); err != nil {
+		if err := scanFile(rows, &f); err != nil {
 			return nil, err
 		}
 		files = append(files, f)

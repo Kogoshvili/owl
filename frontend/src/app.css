@@ -886,3 +886,390 @@ tbody tr:hover {
 .detail-tag-input:focus {
   border-color: var(--text);
 }
+
+/* Virtual Folders */
+.virtual-folders {
+  max-width: 700px;
+}
+
+.virtual-folders h2 {
+  margin: 0 0 16px;
+}
+
+.add-folder-form {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.add-folder-form input {
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-h);
+  font-size: 0.85rem;
+  outline: none;
+}
+
+.add-folder-form input:focus {
+  border-color: var(--text);
+}
+
+.add-folder-form input:first-child {
+  width: 200px;
+}
+
+.add-folder-form input:nth-child(2) {
+  flex: 1;
+}
+
+.folder-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.folder-card {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 12px 16px;
+  cursor: pointer;
+  transition: border-color 0.15s;
+}
+
+.folder-card:hover {
+  border-color: var(--text);
+}
+
+.folder-card-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.folder-name {
+  font-weight: 600;
+  color: var(--text-h);
+}
+
+.folder-desc {
+  color: var(--text);
+  font-size: 0.82rem;
+  margin: 4px 0 0;
+  opacity: 0.8;
+}
+
+.folder-card-meta {
+  margin-top: 4px;
+  font-size: 0.75rem;
+  color: var(--text);
+  opacity: 0.6;
+}
+
+.folder-card-actions {
+  display: flex;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.folder-edit {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.folder-edit input {
+  padding: 4px 8px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-h);
+  font-size: 0.85rem;
+  outline: none;
+}
+
+.folder-edit input:first-child {
+  width: 200px;
+}
+
+.badge-auto {
+  background: #6366f1;
+  color: #fff;
+}
+
+.badge-materialized {
+  background: #059669;
+  color: #fff;
+}
+
+/* Folder Detail Page */
+.folder-detail-page {
+  max-width: 900px;
+}
+
+.btn-back {
+  margin-bottom: 16px;
+}
+
+.folder-detail-header {
+  margin-bottom: 24px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--border);
+}
+
+.folder-detail-header.editing {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.folder-detail-header.editing input {
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-h);
+  font-size: 0.9rem;
+  outline: none;
+}
+
+.folder-detail-header.editing input:first-child {
+  width: 250px;
+}
+
+.folder-detail-title-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.folder-detail-title-row h2 {
+  margin: 0;
+}
+
+.folder-detail-desc {
+  color: var(--text);
+  font-size: 0.85rem;
+  margin: 4px 0 8px;
+  opacity: 0.8;
+}
+
+.folder-header-actions {
+  display: flex;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.folder-section {
+  margin-bottom: 24px;
+}
+
+.folder-section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.folder-section-header h3 {
+  margin: 0;
+}
+
+.folder-files-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.85rem;
+}
+
+.folder-files-table th,
+.folder-files-table td {
+  text-align: left;
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--border);
+}
+
+.folder-files-table th {
+  color: var(--text);
+  font-weight: 500;
+  opacity: 0.7;
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.folder-files-table a {
+  color: var(--accent);
+  text-decoration: none;
+}
+
+.folder-files-table a:hover {
+  text-decoration: underline;
+}
+
+.notes-placeholder {
+  opacity: 0.5;
+  font-style: italic;
+}
+
+.folder-notes-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.folder-notes-list li {
+  padding: 6px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+/* Dialog / File Picker */
+.dialog-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+}
+
+.dialog {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  width: 90vw;
+  max-width: 700px;
+  max-height: 80vh;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+}
+
+.dialog-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px;
+  border-bottom: 1px solid var(--border);
+}
+
+.dialog-header h3 {
+  margin: 0;
+}
+
+.dialog-filters {
+  display: flex;
+  gap: 8px;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border);
+}
+
+.picker-search {
+  flex: 1;
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-h);
+  font-size: 0.85rem;
+  outline: none;
+}
+
+.picker-search:focus {
+  border-color: var(--text);
+}
+
+.dialog-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 16px;
+  border-bottom: 1px solid var(--border);
+  font-size: 0.82rem;
+}
+
+.picker-count {
+  color: var(--text);
+  opacity: 0.7;
+}
+
+.dialog-body {
+  overflow-y: auto;
+  padding: 0 16px;
+  flex: 1;
+}
+
+.picker-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.82rem;
+}
+
+.picker-table th,
+.picker-table td {
+  text-align: left;
+  padding: 5px 8px;
+  border-bottom: 1px solid var(--border);
+}
+
+.picker-table th {
+  color: var(--text);
+  font-weight: 500;
+  opacity: 0.7;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.picker-check {
+  width: 30px;
+  text-align: center;
+}
+
+.row-existing {
+  opacity: 0.5;
+}
+
+.row-selected {
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+}
+
+.badge-existing {
+  background: var(--border);
+  color: var(--text);
+  font-size: 0.68rem;
+  margin-left: 6px;
+  padding: 1px 5px;
+  border-radius: 4px;
+}
+
+.dialog-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 8px 16px;
+  border-top: 1px solid var(--border);
+  font-size: 0.8rem;
+  color: var(--text);
+}
+
+.dialog-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 12px 16px;
+  border-top: 1px solid var(--border);
+}
+
+@media (prefers-color-scheme: dark) {
+  .picker-search {
+    background: color-mix(in srgb, var(--border) 30%, transparent);
+  }
+  .row-selected {
+    background: color-mix(in srgb, var(--accent) 15%, transparent);
+  }
+}

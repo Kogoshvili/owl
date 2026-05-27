@@ -170,6 +170,78 @@ export function removeFileTag(fileId: number, tagId: number): Promise<void> {
   return request<void>(`/files/${fileId}/tags/${tagId}`, { method: "DELETE" })
 }
 
+export interface VirtualFolder {
+  id: number
+  name: string
+  description: string
+  auto_generated: boolean
+  materialized: boolean
+  materialized_path: string | null
+  created_at: string
+}
+
+export interface Note {
+  id: number
+  title: string
+  content: string
+  materialized: boolean
+  materialized_path: string | null
+  created_at: string
+  updated_at: string
+}
+
+export interface VirtualFolderDetail {
+  id: number
+  name: string
+  description: string
+  auto_generated: boolean
+  materialized: boolean
+  materialized_path: string | null
+  created_at: string
+  files: File[]
+  notes: Note[]
+}
+
+export function getVirtualFolders(): Promise<VirtualFolder[]> {
+  return request<VirtualFolder[]>("/virtual-folders")
+}
+
+export function createVirtualFolder(name: string, description?: string): Promise<VirtualFolder> {
+  return request<VirtualFolder>("/virtual-folders", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ name, description: description || "" }),
+  })
+}
+
+export function updateVirtualFolder(id: number, name?: string, description?: string): Promise<VirtualFolder> {
+  return request<VirtualFolder>(`/virtual-folders/${id}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ name, description }),
+  })
+}
+
+export function deleteVirtualFolder(id: number): Promise<void> {
+  return request<void>(`/virtual-folders/${id}`, { method: "DELETE" })
+}
+
+export function getVirtualFolderDetail(id: number): Promise<VirtualFolderDetail> {
+  return request<VirtualFolderDetail>(`/virtual-folders/${id}`)
+}
+
+export function addFilesToFolder(folderId: number, fileIds: number[], source?: string): Promise<{status: string}> {
+  return request<{status: string}>(`/virtual-folders/${folderId}/files`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ file_ids: fileIds, source: source || "manual" }),
+  })
+}
+
+export function removeFileFromFolder(folderId: number, fileId: number): Promise<void> {
+  return request<void>(`/virtual-folders/${folderId}/files/${fileId}`, { method: "DELETE" })
+}
+
 export interface SearchFileResult {
   file_id: number
   name: string
