@@ -31,6 +31,7 @@ func NewRouter(s *store.Store, sc *scanner.Scanner, ext *extractor.Extractor) ht
 	mux.HandleFunc("POST /watched-directories/{id}/extract", wdh.Extract)
 
 	mux.HandleFunc("GET /files", fh.List)
+	mux.HandleFunc("GET /files/extensions", fh.Extensions)
 	mux.HandleFunc("GET /files/{id}", fh.Get)
 	mux.HandleFunc("GET /files/{id}/raw", fh.Raw)
 	mux.HandleFunc("GET /watched-directories/{id}/files", fh.ListByDir)

@@ -81,12 +81,45 @@ export function deleteDir(id: number): Promise<void> {
   return request<void>(`/watched-directories/${id}`, { method: "DELETE" })
 }
 
-export function getFilesByDir(dirId: number): Promise<File[]> {
-  return request<File[]>(`/watched-directories/${dirId}/files`)
+export interface FileListParams {
+  extension?: string
+  status?: string
+  processing_status?: string
+  sort?: string
+  order?: string
+  limit?: number
+  offset?: number
 }
 
-export function getAllFiles(limit = 200): Promise<File[]> {
-  return request<File[]>(`/files?limit=${limit}`)
+export interface FileListResponse {
+  files: File[]
+  total: number
+  limit: number
+  offset: number
+}
+
+export function getFilesByDir(dirId: number, params?: FileListParams): Promise<FileListResponse> {
+  return request<FileListResponse>(`/watched-directories/${dirId}/files?${buildFileParams(params)}`)
+}
+
+export function getAllFiles(params?: FileListParams): Promise<FileListResponse> {
+  return request<FileListResponse>(`/files?${buildFileParams(params)}`)
+}
+
+function buildFileParams(params?: FileListParams): string {
+  const p = new URLSearchParams()
+  if (params?.extension) p.set("extension", params.extension)
+  if (params?.status) p.set("status", params.status)
+  if (params?.processing_status) p.set("processing_status", params.processing_status)
+  if (params?.sort) p.set("sort", params.sort)
+  if (params?.order) p.set("order", params.order)
+  p.set("limit", String(params?.limit ?? 50))
+  if (params?.offset) p.set("offset", String(params.offset))
+  return p.toString()
+}
+
+export function getFileExtensions(): Promise<string[]> {
+  return request<string[]>("/files/extensions")
 }
 
 export function extractDir(id: number): Promise<{queued: number}> {

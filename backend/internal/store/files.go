@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"log"
+	"strings"
 	"time"
 )
 
@@ -46,14 +47,36 @@ type FileFilter struct {
 	ParentDir        *string
 	WatchedDirID     *int64
 	ProcessingStatus *string
+	SortBy           string
+	SortOrder        string
 	Limit            int
 	Offset           int
 }
 
-func (s *Store) ListFiles(f FileFilter) ([]File, error) {
-	query := `SELECT ` + fileColumns + ` FROM files`
-	var args []any
+var allowedSortColumns = map[string]string{
+	"name":              "name",
+	"extension":         "extension",
+	"size":              "size",
+	"modified_at":       "modified_at",
+	"indexed_at":        "indexed_at",
+	"processing_status": "processing_status",
+}
+
+func buildOrderBy(sortBy, sortOrder string) string {
+	col, ok := allowedSortColumns[sortBy]
+	if !ok {
+		col = "indexed_at"
+	}
+	dir := "DESC"
+	if strings.EqualFold(sortOrder, "asc") {
+		dir = "ASC"
+	}
+	return col + " " + dir
+}
+
+func (s *Store) buildFileWhere(f FileFilter) (string, []any) {
 	var conditions []string
+	var args []any
 
 	if f.Status != nil {
 		conditions = append(conditions, "status = ?")
@@ -80,11 +103,23 @@ func (s *Store) ListFiles(f FileFilter) ([]File, error) {
 		args = append(args, *f.ProcessingStatus)
 	}
 
+	where := ""
 	if len(conditions) > 0 {
-		query += " WHERE " + joinConditions(conditions, " AND ")
+		where = " WHERE " + joinConditions(conditions, " AND ")
 	}
+	return where, args
+}
 
-	query += " ORDER BY indexed_at DESC"
+func (s *Store) CountFiles(f FileFilter) (int, error) {
+	where, args := s.buildFileWhere(f)
+	var count int
+	err := s.db.QueryRow("SELECT COUNT(*) FROM files"+where, args...).Scan(&count)
+	return count, err
+}
+
+func (s *Store) ListFiles(f FileFilter) ([]File, error) {
+	where, args := s.buildFileWhere(f)
+	query := `SELECT ` + fileColumns + ` FROM files` + where + " ORDER BY " + buildOrderBy(f.SortBy, f.SortOrder)
 
 	if f.Limit > 0 {
 		query += " LIMIT ?"
@@ -176,24 +211,6 @@ func (s *Store) UpsertFile(f *File) (*File, error) {
 	}
 
 	return s.GetFile(existing.ID)
-}
-
-func (s *Store) ListFilesByDir(dirID int64) ([]File, error) {
-	rows, err := s.db.Query(`SELECT `+fileColumns+` FROM files WHERE watched_dir_id = ? ORDER BY name`, dirID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	var files []File
-	for rows.Next() {
-		var f File
-		if err := scanFile(rows, &f); err != nil {
-			return nil, err
-		}
-		files = append(files, f)
-	}
-	return files, rows.Err()
 }
 
 func (s *Store) DeleteFilesByDir(dirID int64) error {
@@ -360,4 +377,22 @@ func (s *Store) GetFileContent(fileID int64) (string, error) {
 		return "", nil
 	}
 	return content, err
+}
+
+func (s *Store) ListExtensions() ([]string, error) {
+	rows, err := s.db.Query(`SELECT DISTINCT extension FROM files WHERE extension != '' ORDER BY extension`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var exts []string
+	for rows.Next() {
+		var e string
+		if err := rows.Scan(&e); err != nil {
+			return nil, err
+		}
+		exts = append(exts, e)
+	}
+	return exts, rows.Err()
 }

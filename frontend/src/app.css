@@ -55,7 +55,7 @@
   padding: 16px;
 }
 
-.dashboard-page {
+.ingest-page {
   display: flex;
   height: 100%;
   overflow: hidden;
@@ -250,6 +250,16 @@ thead th {
   white-space: nowrap;
 }
 
+thead th.sortable {
+  cursor: pointer;
+  user-select: none;
+  transition: color 0.15s;
+}
+
+thead th.sortable:hover {
+  color: var(--text-h);
+}
+
 tbody td {
   padding: 7px 10px;
   border-bottom: 1px solid color-mix(in srgb, var(--border) 50%, transparent);
@@ -421,6 +431,55 @@ tbody tr:hover {
   font-size: 0.78rem;
 }
 
+.file-footer {
+  margin-top: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.file-pagination {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.pagination-info {
+  color: var(--text);
+  font-size: 0.78rem;
+}
+
+.file-filter-bar {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 12px;
+  align-items: center;
+}
+
+.filter-select {
+  padding: 4px 8px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-h);
+  font-size: 0.82rem;
+  outline: none;
+}
+
+.filter-select:focus {
+  border-color: var(--text);
+}
+
+@media (prefers-color-scheme: dark) {
+  .filter-select {
+    background: color-mix(in srgb, var(--border) 30%, transparent);
+  }
+  .filter-select option {
+    background: #1f2937;
+    color: #f9fafb;
+  }
+}
+
 .empty {
   color: var(--text);
   font-size: 0.85rem;
@@ -429,7 +488,7 @@ tbody tr:hover {
 }
 
 @media (max-width: 700px) {
-  .dashboard-page {
+  .ingest-page {
     flex-direction: column;
   }
   .sidebar {

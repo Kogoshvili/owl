@@ -56,6 +56,12 @@ func (h *FileHandler) List(w http.ResponseWriter, r *http.Request) {
 	if v := r.URL.Query().Get("processing_status"); v != "" {
 		f.ProcessingStatus = &v
 	}
+	if v := r.URL.Query().Get("sort"); v != "" {
+		f.SortBy = v
+	}
+	if v := r.URL.Query().Get("order"); v != "" {
+		f.SortOrder = v
+	}
 	if v := r.URL.Query().Get("limit"); v != "" {
 		if n, err := strconv.Atoi(v); err == nil && n > 0 {
 			f.Limit = n
@@ -67,6 +73,12 @@ func (h *FileHandler) List(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	total, err := h.store.CountFiles(f)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
 	files, err := h.store.ListFiles(f)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
@@ -76,7 +88,24 @@ func (h *FileHandler) List(w http.ResponseWriter, r *http.Request) {
 		files = []store.File{}
 	}
 
-	writeJSON(w, http.StatusOK, addProcessable(files))
+	writeJSON(w, http.StatusOK, map[string]any{
+		"files":  addProcessable(files),
+		"total":  total,
+		"limit":  f.Limit,
+		"offset": f.Offset,
+	})
+}
+
+func (h *FileHandler) Extensions(w http.ResponseWriter, r *http.Request) {
+	extensions, err := h.store.ListExtensions()
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	if extensions == nil {
+		extensions = []string{}
+	}
+	writeJSON(w, http.StatusOK, extensions)
 }
 
 func (h *FileHandler) Get(w http.ResponseWriter, r *http.Request) {
@@ -147,7 +176,42 @@ func (h *FileHandler) ListByDir(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	files, err := h.store.ListFilesByDir(id)
+	f := store.FileFilter{Limit: 50}
+	f.WatchedDirID = &id
+
+	if v := r.URL.Query().Get("extension"); v != "" {
+		f.Extension = &v
+	}
+	if v := r.URL.Query().Get("status"); v != "" {
+		f.Status = &v
+	}
+	if v := r.URL.Query().Get("processing_status"); v != "" {
+		f.ProcessingStatus = &v
+	}
+	if v := r.URL.Query().Get("sort"); v != "" {
+		f.SortBy = v
+	}
+	if v := r.URL.Query().Get("order"); v != "" {
+		f.SortOrder = v
+	}
+	if v := r.URL.Query().Get("limit"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			f.Limit = n
+		}
+	}
+	if v := r.URL.Query().Get("offset"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			f.Offset = n
+		}
+	}
+
+	total, err := h.store.CountFiles(f)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	files, err := h.store.ListFiles(f)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
@@ -156,7 +220,12 @@ func (h *FileHandler) ListByDir(w http.ResponseWriter, r *http.Request) {
 		files = []store.File{}
 	}
 
-	writeJSON(w, http.StatusOK, addProcessable(files))
+	writeJSON(w, http.StatusOK, map[string]any{
+		"files":  addProcessable(files),
+		"total":  total,
+		"limit":  f.Limit,
+		"offset": f.Offset,
+	})
 }
 
 func (h *FileHandler) Extract(w http.ResponseWriter, r *http.Request) {

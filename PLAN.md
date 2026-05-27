@@ -22,17 +22,16 @@
 - [x] Failed status tooltip in file list
 - [x] Error banner on file detail page
 - [x] Clickable file names in file list and search results
+- [x] File filtering and sorting in file list
+  - Filter by extension, processing status
+  - Sort by name, extension, size, indexed_at
+- [x] Pagination for file lists (50 per page, server-side)
+- [x] Nav restructure: Ingest (watched dirs + file list), Files (standalone list), Search
+- [x] Removed placeholder pages (watched-dirs, notes)
 
+## v1 MVP (in progress)
 
-## v1 MVP (current goal)
-
-### Polish existing features
-- [ ] File filtering and sorting in file list
-  - Filter by extension, status, processing status
-  - Sort by name, size, date
-- [ ] Pagination for file lists (currently capped at 200)
-
-### Virtual folders
+### Virtual folders (next up)
 - [ ] Virtual folders - frontend (backend done)
   - Create/list/delete folders
   - Add/remove files to/from folders
@@ -43,6 +42,9 @@
 - [ ] Virtual folder suggestions — FTS5 keyword overlap scoring, suggest groupings
 
 ## v2 - Future
+
+### Dashboard
+- [ ] Proper dashboard page (was placeholder, moved to v2)
 
 ### Automation
 - [ ] Batch operations - select multiple files, bulk tag/extract/delete

@@ -15,8 +15,10 @@ import {
   addFileTag,
   removeFileTag,
   listTags,
+  getFileExtensions,
   type SearchScope,
 } from "../api"
+import type { FilterState } from "../components/file-list"
 
 export function useWatchedDirs() {
   return useQuery({
@@ -25,18 +27,45 @@ export function useWatchedDirs() {
   })
 }
 
-export function useAllFiles() {
+export function useAllFiles(filters?: FilterState) {
+  const limit = filters?.limit ?? 50
+  const offset = (filters?.page ?? 1) > 1 ? ((filters?.page ?? 1) - 1) * limit : 0
+
   return useQuery({
-    queryKey: ["files"],
-    queryFn: () => getAllFiles(),
+    queryKey: ["files", filters],
+    queryFn: () => getAllFiles({
+      extension: filters?.extension,
+      processing_status: filters?.processing_status,
+      sort: filters?.sort,
+      order: filters?.order,
+      limit,
+      offset,
+    }),
   })
 }
 
-export function useFilesByDir(dirId: number | null) {
+export function useFilesByDir(dirId: number | null, filters?: FilterState) {
+  const limit = filters?.limit ?? 50
+  const offset = (filters?.page ?? 1) > 1 ? ((filters?.page ?? 1) - 1) * limit : 0
+
   return useQuery({
-    queryKey: ["files", "dir", dirId],
-    queryFn: () => getFilesByDir(dirId!),
+    queryKey: ["files", "dir", dirId, filters],
+    queryFn: () => getFilesByDir(dirId!, {
+      extension: filters?.extension,
+      processing_status: filters?.processing_status,
+      sort: filters?.sort,
+      order: filters?.order,
+      limit,
+      offset,
+    }),
     enabled: dirId !== null,
+  })
+}
+
+export function useFileExtensions() {
+  return useQuery({
+    queryKey: ["fileExtensions"],
+    queryFn: getFileExtensions,
   })
 }
 
