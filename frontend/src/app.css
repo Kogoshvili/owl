@@ -1477,8 +1477,9 @@ tbody tr:hover {
 .folder-suggestions-header {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  gap: 8px;
   margin-bottom: 12px;
+  flex-wrap: wrap;
 }
 
 .folder-suggestions-header h2 {
@@ -1488,6 +1489,7 @@ tbody tr:hover {
 .folder-suggestions-actions {
   display: flex;
   gap: 6px;
+  margin-left: auto;
 }
 
 .suggestion-list {
@@ -1585,17 +1587,29 @@ tbody tr:hover {
 .tag-suggestions-header {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  gap: 8px;
   margin-bottom: 12px;
+  flex-wrap: wrap;
 }
 
 .tag-suggestions-header h2 {
   margin: 0;
 }
 
+.strategy-select {
+  font-size: 0.8rem;
+  padding: 4px 8px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--fg);
+  flex-shrink: 0;
+}
+
 .tag-suggestions-actions {
   display: flex;
   gap: 6px;
+  margin-left: auto;
 }
 
 .tag-suggestion-list {

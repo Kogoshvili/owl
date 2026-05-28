@@ -37,6 +37,7 @@ import {
   acceptTag,
   refineFolder,
   refineTag,
+  listStrategies,
   type SearchScope,
 } from "../api"
 import type { FilterState } from "../components/file-list"
@@ -282,6 +283,13 @@ export function useRemoveFileFromFolder() {
     onSuccess: (_data, vars) => {
       qc.invalidateQueries({ queryKey: ["virtualFolder", vars.folderId] })
     },
+  })
+}
+
+export function useStrategies() {
+  return useQuery({
+    queryKey: ["strategies"],
+    queryFn: listStrategies,
   })
 }
 

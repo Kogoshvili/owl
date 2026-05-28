@@ -97,3 +97,52 @@ func parseTagResponse(raw string) (*TagRefinementResult, error) {
 
 	return &result, nil
 }
+
+func buildKeywordExtractionPrompt(files []struct{ ID int64; Name string; Content string }) string {
+	var fileStrings []string
+	for i, f := range files {
+		content := f.Content
+		if len(content) > 500 {
+			content = content[:500]
+		}
+		fileStrings = append(fileStrings, fmt.Sprintf("%d. [id:%d] %s\nContent preview: %s", i+1, f.ID, f.Name, content))
+	}
+
+	return `You are a file analysis assistant. For each file below, extract 5-10 keywords that best describe its content and purpose.
+
+Rules:
+- Extract specific, meaningful keywords (not generic words like "file", "data", "document")
+- Include topic, technology, domain, or subject keywords
+- Keywords should be lowercase, 1-3 words each
+- Return exactly the same number of entries as files provided
+
+Files:
+` + strings.Join(fileStrings, "\n\n") + `
+
+Respond ONLY with valid JSON array (no markdown):
+[{"id": 1, "keywords": ["keyword1", "keyword2", ...]}, ...]`
+}
+
+func parseKeywordExtractionResponse(raw string) ([]KeywordExtraction, error) {
+	raw = strings.TrimSpace(raw)
+	raw = strings.TrimPrefix(raw, "```json")
+	raw = strings.TrimPrefix(raw, "```")
+	raw = strings.TrimSuffix(raw, "```")
+
+	var result []struct {
+		ID       int64    `json:"id"`
+		Keywords []string `json:"keywords"`
+	}
+	if err := json.Unmarshal([]byte(raw), &result); err != nil {
+		return nil, err
+	}
+
+	extractions := make([]KeywordExtraction, len(result))
+	for i, r := range result {
+		extractions[i] = KeywordExtraction{
+			FileID:   r.ID,
+			Keywords: r.Keywords,
+		}
+	}
+	return extractions, nil
+}

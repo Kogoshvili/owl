@@ -73,7 +73,7 @@ func main() {
 	s.RecoverStuckFiles()
 	sc := scanner.New(s)
 	ext := extractor.New(s)
-	router := api.NewRouter(s, sc, ext, llmClient)
+	router := api.NewRouter(s, sc, ext, llmClient, cfg)
 	addr := ":3721"
 	slog.Info("starting server", "addr", addr)
 	if err := http.ListenAndServe(addr, router); err != nil {

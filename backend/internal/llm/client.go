@@ -271,3 +271,41 @@ func (c *Client) RefineTag(ctx context.Context, tagName string, fileNames []stri
 	slog.Info("llm: refined tag", "name", tagName, "meaningful", result.Meaningful, "better_name", result.BetterName, "description", result.Description)
 	return result, nil
 }
+
+func (c *Client) ExtractKeywords(ctx context.Context, files []struct{ ID int64; Name string; Content string }) ([]KeywordExtraction, error) {
+	if !c.IsAvailable(ctx) {
+		return nil, fmt.Errorf("llm: not available")
+	}
+
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	prompt := buildKeywordExtractionPrompt(files)
+
+	var result []KeywordExtraction
+	for attempt := 1; attempt <= maxRetries; attempt++ {
+		rawResponse, err := c.chatCompletion(ctx, prompt)
+		if err != nil {
+			if attempt == maxRetries {
+				return nil, fmt.Errorf("llm: extract keywords failed: %w", err)
+			}
+			slog.Warn("llm: extract keywords failed, retrying", "attempt", attempt, "error", err)
+			continue
+		}
+
+		parsed, err := parseKeywordExtractionResponse(rawResponse)
+		if err != nil {
+			if attempt == maxRetries {
+				slog.Error("llm: parse keyword response failed", "files", len(files), "error", err)
+				return nil, err
+			}
+			slog.Warn("llm: parse keyword response failed, retrying", "attempt", attempt, "error", err)
+			continue
+		}
+		result = parsed
+		break
+	}
+
+	slog.Info("llm: extracted keywords", "files", len(result))
+	return result, nil
+}

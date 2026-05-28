@@ -2,6 +2,8 @@
   "llm": {
     "enabled": true,
     "base_url": "http://localhost:1234/v1",
-    "model": "deepseek-r1-distill-qwen-1.5b"
+    "model": "deepseek-r1-distill-qwen-1.5b",
+    "embed_base_url": "http://localhost:1234/v1",
+    "embed_model": ""
   }
 }

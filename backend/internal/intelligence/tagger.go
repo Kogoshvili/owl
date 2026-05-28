@@ -61,16 +61,18 @@ var extensionTags = map[string]string{
 }
 
 type Tagger struct {
-	analyzer *Analyzer
-	store    *store.Store
-	llm      *llm.Client
+	analyzer  *Analyzer
+	store     *store.Store
+	llm       *llm.Client
+	registry  *Registry
 }
 
-func NewTagger(analyzer *Analyzer, store *store.Store, llmClient *llm.Client) *Tagger {
+func NewTagger(analyzer *Analyzer, store *store.Store, llmClient *llm.Client, registry *Registry) *Tagger {
 	return &Tagger{
 		analyzer: analyzer,
 		store:    store,
 		llm:      llmClient,
+		registry: registry,
 	}
 }
 
@@ -95,75 +97,32 @@ func (t *Tagger) AutoTagFile(fileID int64) ([]store.Tag, error) {
 		}
 	}
 
-	// Apply threshold for single-file auto-tag: only assign tags that
-	// already have at least (minTagFileCount - 1) other files.
-	// This prevents creating noise from unique path segments/content.
 	return t.tagFile(file, content, true)
 }
 
-func (t *Tagger) AutoTagFiles(ctx context.Context, fileIDs []int64) (map[int64][]store.Tag, error) {
-	slog.Info("auto-tag: starting bulk", "files", len(fileIDs), "llm_enabled", t.llm != nil && t.llm.IsAvailable(ctx))
-
-	// Collect all tag candidates across all files
-	fileContents := make(map[int64]string)
-	fileData := make(map[int64]*store.File)
-	tagCandidates := make(map[string][]int64) // tagName -> fileIDs
-
-	for i, fileID := range fileIDs {
-		file, err := t.store.GetFile(fileID)
-		if err != nil {
-			return nil, err
-		}
-		if file == nil {
-			continue
-		}
-
-		content := ""
-		if file.ProcessingStatus == "processed" {
-			keywords, err := t.analyzer.GetFileKeywords(fileID, 10)
-			if err == nil && len(keywords) > 0 {
-				contentKeywords := make([]string, 0, len(keywords))
-				for _, kw := range keywords {
-					contentKeywords = append(contentKeywords, kw.Term)
-				}
-				content = strings.Join(contentKeywords, " ")
-			}
-		}
-
-		fileData[fileID] = file
-		fileContents[fileID] = content
-
-		tagNames := t.collectTagsFromFile(file, content)
-		for _, tagName := range tagNames {
-			tagCandidates[tagName] = append(tagCandidates[tagName], fileID)
-		}
-
-		if (i+1)%100 == 0 || i == len(fileIDs)-1 {
-			slog.Info("auto-tag: collecting candidates", "progress", i+1, "total", len(fileIDs))
-		}
+func (t *Tagger) AutoTagFiles(ctx context.Context, fileIDs []int64, strategyID StrategyID) (map[int64][]store.Tag, error) {
+	strategy := t.registry.Get(strategyID)
+	if strategy == nil {
+		strategy = t.registry.Default()
 	}
 
-	totalCandidates := len(tagCandidates)
+	slog.Info("auto-tag: starting", "files", len(fileIDs), "strategy", strategyID, "llm_enabled", t.llm != nil && t.llm.IsAvailable(ctx))
 
-	// Filter: only keep tags with >= minTagFileCount files
-	for name, ids := range tagCandidates {
-		if len(ids) < minTagFileCount {
-			delete(tagCandidates, name)
-		}
+	suggestions, err := strategy.SuggestTags(ctx, fileIDs)
+	if err != nil {
+		return nil, err
 	}
 
-	slog.Info("auto-tag: filtering candidates", "total_candidates", totalCandidates, "passing_threshold", len(tagCandidates))
-
-	// Pass 2: write tags that pass threshold
 	result := make(map[int64][]store.Tag)
 	createdTags := make(map[string]*store.Tag)
-	for tagName, fileIDs := range tagCandidates {
-		tag, err := t.store.EnsureTag(tagName, "auto")
+
+	for _, sug := range suggestions {
+		tag, err := t.store.EnsureTag(sug.Name, "auto")
 		if err != nil {
 			continue
 		}
-		createdTags[tagName] = tag
-		for _, fileID := range fileIDs {
+		createdTags[sug.Name] = tag
+		for _, fileID := range sug.FileIDs {
 			if err := t.store.AddFileTag(fileID, tag.ID, "auto"); err != nil {
 				continue
 			}
@@ -171,7 +130,6 @@ func (t *Tagger) AutoTagFiles(ctx context.Context, fileIDs []int64) (map[int64][
 		}
 	}
 
-	// LLM refinement: evaluate and rename/delete tags
 	llmAvailable := t.llm != nil && t.llm.IsAvailable(ctx)
 	if llmAvailable {
 		slog.Info("auto-tag: LLM refinement", "tags_to_evaluate", len(createdTags))
@@ -196,7 +154,7 @@ func (t *Tagger) AutoTagFiles(ctx context.Context, fileIDs []int64) (map[int64][
 			if !refinement.Meaningful {
 				slog.Info("auto-tag: LLM rejected tag", "name", tagName)
 				t.store.DeleteTag(tag.ID)
-				for _, fileID := range fileIDs {
+				for fileID := range result {
 					if tags, ok := result[fileID]; ok {
 						filtered := []store.Tag{}
 						for _, t := range tags {
@@ -222,7 +180,7 @@ func (t *Tagger) AutoTagFiles(ctx context.Context, fileIDs []int64) (map[int64][
 		}
 	}
 
-	slog.Info("auto-tag: complete", "files_tagged", len(result), "tags_written", len(tagCandidates))
+	slog.Info("auto-tag: complete", "files_tagged", len(result), "tags_written", len(createdTags))
 
 	return result, nil
 }
@@ -313,44 +271,7 @@ func shouldApplyTag(tagName string, fileID int64, st *store.Store, applyThreshol
 	return count >= (minTagFileCount - 1)
 }
 
-func (t *Tagger) collectTagsFromFile(file *store.File, content string) []string {
-	var tagNames []string
-	seen := make(map[string]bool)
 
-	extensionTag := t.getExtensionTag(file.Extension)
-	if extensionTag != "" {
-		if !seen[extensionTag] {
-			tagNames = append(tagNames, extensionTag)
-			seen[extensionTag] = true
-		}
-	}
-
-	pathTags := t.extractTagsFromPath(file.Path)
-	for _, tagName := range pathTags {
-		if seen[tagName] {
-			continue
-		}
-		tagNames = append(tagNames, tagName)
-		seen[tagName] = true
-	}
-
-	if content != "" {
-		contentTags := t.extractTagsFromContent(content)
-		maxContentTags := 5
-		for i, tagName := range contentTags {
-			if i >= maxContentTags {
-				break
-			}
-			if seen[tagName] {
-				continue
-			}
-			tagNames = append(tagNames, tagName)
-			seen[tagName] = true
-		}
-	}
-
-	return tagNames
-}
 
 func (t *Tagger) getTagKeywords(files []store.File) []string {
 	keywordCount := make(map[string]int)
@@ -394,49 +315,34 @@ func (t *Tagger) getTagKeywords(files []store.File) []string {
 }
 
 func (t *Tagger) getExtensionTag(ext string) string {
-	ext = strings.ToLower(strings.TrimPrefix(ext, "."))
-	return extensionTags[ext]
+	return getExtensionTag(ext)
 }
 
 func (t *Tagger) extractTagsFromPath(path string) []string {
 	var tags []string
-
 	dir := filepath.Dir(path)
 	parts := strings.Split(filepath.ToSlash(dir), "/")
-
 	for _, part := range parts {
 		part = strings.TrimSpace(part)
-		if len(part) < 3 {
+		if len(part) < 3 || part == "." || part == ".." {
 			continue
 		}
-		if part == "." || part == ".." {
-			continue
-		}
-		if IsStopword(NormalizeTerm(part)) {
-			continue
-		}
-		if IsNumeric(part) {
-			continue
-		}
-
 		term := NormalizeTerm(part)
 		if !IsStopword(term) && !IsNumeric(term) {
 			tags = append(tags, term)
 		}
 	}
-
 	return tags
 }
 
 func (t *Tagger) extractTagsFromContent(content string) []string {
 	keywords := ExtractKeywordsFromContent(content, 10)
-
 	tags := make([]string, 0, len(keywords))
 	for _, kw := range keywords {
 		if !IsStopword(kw.Term) && !IsNumeric(kw.Term) {
 			tags = append(tags, kw.Term)
 		}
 	}
-
 	return tags
 }
+

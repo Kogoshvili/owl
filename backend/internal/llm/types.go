@@ -20,3 +20,8 @@ type TagRefinementResult struct {
 	BetterName  string
 	Description string
 }
+
+type KeywordExtraction struct {
+	FileID   int64
+	Keywords []string
+}

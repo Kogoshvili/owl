@@ -1,23 +1,26 @@
 import { useState } from "preact/hooks"
-import { useFolderSuggestions, useGenerateFolderSuggestions, useAcceptFolderSuggestion, useDismissFolderSuggestion, useRefineFolder } from "../hooks/queries"
+import { useFolderSuggestions, useGenerateFolderSuggestions, useAcceptFolderSuggestion, useDismissFolderSuggestion, useRefineFolder, useStrategies } from "../hooks/queries"
 import { route } from "preact-router"
 import type { FolderSuggestion } from "../api"
 
 export function FolderSuggestions() {
   const suggestionsQuery = useFolderSuggestions()
+  const strategiesQuery = useStrategies()
   const generateMutation = useGenerateFolderSuggestions()
   const acceptMutation = useAcceptFolderSuggestion()
   const dismissMutation = useDismissFolderSuggestion()
   const refineMutation = useRefineFolder()
   const [generating, setGenerating] = useState(false)
   const [refiningId, setRefiningId] = useState<number | null>(null)
+  const [strategy, setStrategy] = useState<string>("path_tfidf")
 
   const suggestions = suggestionsQuery.data ? Object.values(suggestionsQuery.data) : []
+  const strategies = strategiesQuery.data ?? []
 
   const handleGenerate = async () => {
     setGenerating(true)
     try {
-      await generateMutation.mutateAsync({})
+      await generateMutation.mutateAsync({ strategy })
     } catch (e: any) {
       console.error(e)
     } finally {
@@ -86,6 +89,19 @@ export function FolderSuggestions() {
     <div class="folder-suggestions">
       <div class="folder-suggestions-header">
         <h2>Suggestions</h2>
+        {strategies.length > 0 && (
+          <select
+            class="strategy-select"
+            value={strategy}
+            onChange={(e) => setStrategy((e.target as HTMLSelectElement).value)}
+          >
+            {strategies.map((s) => (
+              <option key={s.id} value={s.id} disabled={!s.available}>
+                {s.display_name} — {s.speed_hint}
+              </option>
+            ))}
+          </select>
+        )}
         <div class="folder-suggestions-actions">
           <button
             class="btn btn-sm btn-primary"

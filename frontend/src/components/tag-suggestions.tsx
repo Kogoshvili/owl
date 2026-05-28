@@ -1,23 +1,26 @@
 import { useState } from "preact/hooks"
-import { useTags, useTagFiles, useAcceptTag, useDeleteTag, useRefineTag } from "../hooks/queries"
+import { useTags, useTagFiles, useAcceptTag, useDeleteTag, useRefineTag, useStrategies } from "../hooks/queries"
 import { route } from "preact-router"
 import type { TagWithCount } from "../api"
 
 export function TagSuggestions() {
   const tagsQuery = useTags("auto")
+  const strategiesQuery = useStrategies()
   const autoTagMutation = useTagFiles()
   const acceptMutation = useAcceptTag()
   const deleteMutation = useDeleteTag()
   const refineMutation = useRefineTag()
   const [autoTagResult, setAutoTagResult] = useState<{count: number; tagged: number; tag_count: number} | null>(null)
   const [refiningId, setRefiningId] = useState<number | null>(null)
+  const [strategy, setStrategy] = useState<string>("path_tfidf")
 
   const autoTags = tagsQuery.data ?? []
+  const strategies = strategiesQuery.data ?? []
 
   const handleAutoTag = async () => {
     setAutoTagResult(null)
     try {
-      const result = await autoTagMutation.mutateAsync({})
+      const result = await autoTagMutation.mutateAsync({ strategy })
       setAutoTagResult(result)
     } catch (e: any) {
       console.error(e)
@@ -87,6 +90,19 @@ export function TagSuggestions() {
     <div class="tag-suggestions">
       <div class="tag-suggestions-header">
         <h2>Auto Tags</h2>
+        {strategies.length > 0 && (
+          <select
+            class="strategy-select"
+            value={strategy}
+            onChange={(e) => setStrategy((e.target as HTMLSelectElement).value)}
+          >
+            {strategies.map((s) => (
+              <option key={s.id} value={s.id} disabled={!s.available}>
+                {s.display_name} — {s.speed_hint}
+              </option>
+            ))}
+          </select>
+        )}
         <div class="tag-suggestions-actions">
           <button
             class="btn btn-sm btn-primary"

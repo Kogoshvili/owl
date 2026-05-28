@@ -5,13 +5,14 @@ import (
 
 	"owl/internal/api/handler"
 	"owl/internal/api/middleware"
+	"owl/internal/config"
 	"owl/internal/extractor"
 	"owl/internal/llm"
 	"owl/internal/scanner"
 	"owl/internal/store"
 )
 
-func NewRouter(s *store.Store, sc *scanner.Scanner, ext *extractor.Extractor, llmClient *llm.Client) http.Handler {
+func NewRouter(s *store.Store, sc *scanner.Scanner, ext *extractor.Extractor, llmClient *llm.Client, cfg *config.Config) http.Handler {
 	mux := http.NewServeMux()
 
 	wdh := handler.NewWatchedDirHandler(s, sc, ext)
@@ -21,7 +22,7 @@ func NewRouter(s *store.Store, sc *scanner.Scanner, ext *extractor.Extractor, ll
 	vfh := handler.NewVirtualFolderHandler(s)
 	nh := handler.NewNoteHandler(s)
 	sh := handler.NewSearchHandler(s)
-	ih := handler.NewIntelligenceHandler(s, llmClient)
+	ih := handler.NewIntelligenceHandler(s, llmClient, cfg)
 
 	mux.HandleFunc("GET /health", handleHealth)
 
@@ -69,6 +70,7 @@ func NewRouter(s *store.Store, sc *scanner.Scanner, ext *extractor.Extractor, ll
 	mux.HandleFunc("POST /intelligence/files/{id}/tag", ih.TagFile)
 	mux.HandleFunc("POST /intelligence/files/tag", ih.TagFiles)
 	mux.HandleFunc("POST /intelligence/watched-directories/{id}/tag", ih.TagWatchedDir)
+	mux.HandleFunc("GET /intelligence/strategies", ih.ListStrategies)
 	mux.HandleFunc("GET /intelligence/folders/suggestions", ih.ListFolderSuggestions)
 	mux.HandleFunc("POST /intelligence/folders/suggestions", ih.GenerateSuggestions)
 	mux.HandleFunc("POST /intelligence/folders/suggestions/{id}/accept", ih.AcceptFolderSuggestion)

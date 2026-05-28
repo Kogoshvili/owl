@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"log/slog"
 	"net/http"
+	"owl/internal/config"
+	"owl/internal/embedding"
 	"owl/internal/intelligence"
 	"owl/internal/llm"
 	"owl/internal/store"
@@ -18,17 +20,44 @@ type IntelligenceHandler struct {
 	tagger     *intelligence.Tagger
 	suggester  *intelligence.Suggester
 	llm        *llm.Client
+	registry   *intelligence.Registry
 }
 
-func NewIntelligenceHandler(s *store.Store, llmClient *llm.Client) *IntelligenceHandler {
+func NewIntelligenceHandler(s *store.Store, llmClient *llm.Client, cfg *config.Config) *IntelligenceHandler {
 	analyzer := intelligence.NewAnalyzer(s.Db())
+	registry := intelligence.NewRegistry()
+
+	registry.Register(intelligence.NewPathTFIDFStrategy(analyzer, s, llmClient))
+	registry.Register(intelligence.NewContentTFIDFStrategy(analyzer, s, llmClient))
+
+	if llmClient != nil {
+		registry.Register(intelligence.NewLLMKeywordStrategy(analyzer, s, llmClient))
+	}
+
+	if cfg.LLM.EmbedBaseURL != "" {
+		embedClient := embedding.NewClient(cfg.LLM.EmbedBaseURL, cfg.LLM.EmbedModel)
+		registry.Register(intelligence.NewEmbeddingsStrategy(analyzer, s, llmClient, embedClient))
+
+		if llmClient != nil {
+			registry.Register(intelligence.NewHybridStrategy(analyzer, s, llmClient, embedClient))
+		}
+	}
+
+	tagger := intelligence.NewTagger(analyzer, s, llmClient, registry)
+	suggester := intelligence.NewSuggester(analyzer, s, llmClient, registry)
+
 	return &IntelligenceHandler{
 		store:     s,
 		analyzer:  analyzer,
-		tagger:    intelligence.NewTagger(analyzer, s, llmClient),
-		suggester: intelligence.NewSuggester(analyzer, s, llmClient),
+		tagger:    tagger,
+		suggester: suggester,
 		llm:       llmClient,
+		registry:  registry,
 	}
+}
+
+func (h *IntelligenceHandler) ListStrategies(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, http.StatusOK, h.registry.List())
 }
 
 func (h *IntelligenceHandler) TagFile(w http.ResponseWriter, r *http.Request) {
@@ -60,6 +89,8 @@ func (h *IntelligenceHandler) TagFiles(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	strategyID := intelligence.ParseStrategyID(r.URL.Query().Get("strategy"))
+
 	filter := store.FileFilter{
 		Extension:        req.Extension,
 		ProcessingStatus: req.ProcessingStatus,
@@ -78,14 +109,14 @@ func (h *IntelligenceHandler) TagFiles(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	slog.Info("auto-tagging files", "count", len(files))
+	slog.Info("auto-tagging files", "count", len(files), "strategy", strategyID)
 
 	fileIDs := make([]int64, len(files))
 	for i, f := range files {
 		fileIDs[i] = f.ID
 	}
 
-	result, err := h.tagger.AutoTagFiles(r.Context(), fileIDs)
+	result, err := h.tagger.AutoTagFiles(r.Context(), fileIDs, strategyID)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
@@ -111,6 +142,8 @@ func (h *IntelligenceHandler) TagWatchedDir(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
+	strategyID := intelligence.ParseStrategyID(r.URL.Query().Get("strategy"))
+
 	filter := store.FileFilter{
 		WatchedDirID: &dirID,
 		Limit:        1000,
@@ -122,14 +155,14 @@ func (h *IntelligenceHandler) TagWatchedDir(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	slog.Info("auto-tagging watched dir", "dir_id", dirID, "count", len(files))
+	slog.Info("auto-tagging watched dir", "dir_id", dirID, "count", len(files), "strategy", strategyID)
 
 	fileIDs := make([]int64, len(files))
 	for i, f := range files {
 		fileIDs[i] = f.ID
 	}
 
-	result, err := h.tagger.AutoTagFiles(r.Context(), fileIDs)
+	result, err := h.tagger.AutoTagFiles(r.Context(), fileIDs, strategyID)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
@@ -198,6 +231,8 @@ func (h *IntelligenceHandler) GenerateSuggestions(w http.ResponseWriter, r *http
 		return
 	}
 
+	strategyID := intelligence.ParseStrategyID(r.URL.Query().Get("strategy"))
+
 	minFiles := intelligence.MinFilesForFolder
 	if req.MinFiles != nil && *req.MinFiles > 0 {
 		minFiles = *req.MinFiles
@@ -208,10 +243,10 @@ func (h *IntelligenceHandler) GenerateSuggestions(w http.ResponseWriter, r *http
 		minSimilarity = *req.MinSimilarity
 	}
 
-	slog.Info("generating folder suggestions", "min_files", minFiles, "min_similarity", minSimilarity)
+	slog.Info("generating folder suggestions", "min_files", minFiles, "min_similarity", minSimilarity, "strategy", strategyID)
 	start := time.Now()
 
-	suggestions, err := h.suggester.SuggestVirtualFolders(r.Context(), minFiles, minSimilarity)
+	suggestions, err := h.suggester.SuggestVirtualFolders(r.Context(), minFiles, minSimilarity, strategyID)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
