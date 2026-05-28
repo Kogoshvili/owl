@@ -144,7 +144,11 @@ func (s *ContentTFIDFStrategy) SuggestFoldersWithCorpus(ctx context.Context, fil
 		for _, id2 := range fileIDs[i+1:] {
 			sim := cosineSimilarityMaps(fileKeywords[id1], fileKeywords[id2])
 			if sim >= minSimilarity {
-				similarityMatrix[[2]int64{id1, id2}] = sim
+				if id1 < id2 {
+					similarityMatrix[[2]int64{id1, id2}] = sim
+				} else {
+					similarityMatrix[[2]int64{id2, id1}] = sim
+				}
 			}
 		}
 		if (i+1)%50 == 0 || i == len(fileIDs)-1 {
@@ -153,10 +157,62 @@ func (s *ContentTFIDFStrategy) SuggestFoldersWithCorpus(ctx context.Context, fil
 	}
 	slog.Info("strategy[content_tfidf]: similarity complete", "elapsed", time.Since(start).String(), "similar_pairs", len(similarityMatrix))
 
+	emptyKW := 0
+	minKW, maxKW, totalKW := 0, 0, 0
+	for _, id := range fileIDs {
+		n := len(fileKeywords[id])
+		totalKW += n
+		if n == 0 {
+			emptyKW++
+		}
+		if minKW == 0 || n < minKW {
+			minKW = n
+		}
+		if n > maxKW {
+			maxKW = n
+		}
+	}
+	slog.Info("strategy[content_tfidf]: keyword stats", "files", len(fileIDs), "empty", emptyKW, "min_keywords", minKW, "max_keywords", maxKW, "avg_keywords", float64(totalKW)/float64(len(fileIDs)))
+
 	slog.Info("strategy[content_tfidf]: clustering", "files", len(fileIDs))
 	start = time.Now()
 	clusters := clusterFiles(fileIDs, similarityMatrix, minSimilarity, minFiles)
 	slog.Info("strategy[content_tfidf]: clustering complete", "clusters", len(clusters), "elapsed", time.Since(start).String())
+
+	if len(clusters) == 0 {
+		// Debug: find connected components to understand why
+		assigned := make(map[int64]bool)
+		compSizes := map[int]int{}
+		for _, id := range fileIDs {
+			if assigned[id] {
+				continue
+			}
+			comp := []int64{id}
+			assigned[id] = true
+			changed := true
+			for changed {
+				changed = false
+				for _, cid := range comp {
+					for _, fid := range fileIDs {
+						if assigned[fid] {
+							continue
+						}
+						pair := [2]int64{cid, fid}
+						if cid > fid {
+							pair = [2]int64{fid, cid}
+						}
+						if _, exists := similarityMatrix[pair]; exists {
+							comp = append(comp, fid)
+							assigned[fid] = true
+							changed = true
+						}
+					}
+				}
+			}
+			compSizes[len(comp)]++
+		}
+		slog.Info("strategy[content_tfidf]: component size distribution (0 clusters)", "distribution", fmt.Sprintf("%v", compSizes), "total_components", len(compSizes))
+	}
 
 	slog.Info("strategy[content_tfidf]: refining and generating suggestions", "clusters", len(clusters))
 

@@ -371,10 +371,17 @@ func (h *IntelligenceHandler) generateSuggestionsAsync(ctx context.Context, minF
 	slog.Info("folder guard classification complete", "guarded_count", len(guardedPaths))
 
 	h.updateGenerationStatus("filtering_folders", "Filtering out guarded folders", 0, len(folderToFileIDs))
-	slog.Info("filtering out guarded folders")
+	slog.Info("filtering out guarded folders", "folder_count", len(folderToFileIDs), "guarded_paths", len(guardedPaths))
 	filteredCount := 0
 	for path := range folderToFileIDs {
-		if guardedPaths[path] {
+		isGuarded := false
+		for guardedPath := range guardedPaths {
+			if guardedPaths[guardedPath] && (path == guardedPath || strings.HasPrefix(path, guardedPath+"/")) {
+				isGuarded = true
+				break
+			}
+		}
+		if isGuarded {
 			slog.Debug("skipping guarded folder", "path", path)
 			delete(folderToFileIDs, path)
 			filteredCount++

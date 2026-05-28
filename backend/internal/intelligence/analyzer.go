@@ -150,58 +150,34 @@ func (a *Analyzer) GetFileKeywords(fileID int64, topN int) ([]Keyword, error) {
 }
 
 func (a *Analyzer) GetFileKeywordsWithFallback(fileID int64, topN int) ([]Keyword, error) {
+	var keywords []Keyword
+
 	// Try content first
 	var content sql.NullString
 	err := a.db.QueryRow(`SELECT content FROM files_fts WHERE file_id = ?`, fileID).Scan(&content)
 	if err == nil && content.Valid && content.String != "" {
-		return ExtractKeywordsFromContent(content.String, topN), nil
+		keywords = ExtractKeywordsFromContent(content.String, topN)
 	}
 
-	// Fallback: get filename
+	// Always add filename keywords + extension tag (even when content exists)
 	var name string
 	err = a.db.QueryRow(`SELECT name FROM files WHERE id = ?`, fileID).Scan(&name)
-	if err != nil {
-		return []Keyword{}, nil
-	}
-
-	// Extract keywords from filename (without extension)
-	baseName := strings.TrimSuffix(name, filepath.Ext(name))
-	tokens := Tokenize(baseName)
-
-	// Normalize and filter
-	termFreq := make(map[string]int)
-	for _, token := range tokens {
-		term := NormalizeTerm(token)
-		if len(term) < 3 {
-			continue
+	if err == nil {
+		baseName := strings.TrimSuffix(name, filepath.Ext(name))
+		for _, token := range Tokenize(baseName) {
+			term := NormalizeTerm(token)
+			if len(term) < 3 || IsStopword(term) || IsNumeric(term) {
+				continue
+			}
+			keywords = append(keywords, Keyword{Term: term, Score: 1.0})
 		}
-		if IsStopword(term) {
-			continue
-		}
-		if IsNumeric(term) {
-			continue
-		}
-		termFreq[term]++
-	}
-
-	// Build keywords from filename
-	keywords := make([]Keyword, 0, len(termFreq))
-	for term, freq := range termFreq {
-		keywords = append(keywords, Keyword{
-			Term:  term,
-			Score: float64(freq),
-		})
 	}
 
 	// Add extension tag with higher weight
 	var ext string
 	a.db.QueryRow(`SELECT extension FROM files WHERE id = ?`, fileID).Scan(&ext)
-	extTag := getExtensionTag(ext)
-	if extTag != "" {
-		keywords = append(keywords, Keyword{
-			Term:  extTag,
-			Score: 5.0,
-		})
+	if tag := getExtensionTag(ext); tag != "" {
+		keywords = append(keywords, Keyword{Term: tag, Score: 5.0})
 	}
 
 	return topKeywords(keywords, topN), nil
