@@ -338,6 +338,15 @@ export interface FolderCoherence {
   outlier_files: OutlierFile[]
 }
 
+export interface FolderGuardClassification {
+  id: number
+  path: string
+  guarded: boolean
+  reason: string
+  source: "llm" | "user"
+  classified_at: string
+}
+
 export function listStrategies(): Promise<StrategyInfo[]> {
   return request<StrategyInfo[]>("/intelligence/strategies")
 }
@@ -355,6 +364,18 @@ export function listPhysicalFolderFiles(path: string): Promise<{path: string, fi
 
 export function analyzeFolderCoherence(path: string): Promise<FolderCoherence> {
   return request<FolderCoherence>(`/intelligence/folders/physical/coherence?path=${encodeURIComponent(path)}`)
+}
+
+export function listFolderGuards(): Promise<FolderGuardClassification[]> {
+  return request<FolderGuardClassification[]>("/intelligence/folders/guards")
+}
+
+export function setFolderGuard(path: string, guarded: boolean): Promise<{status: string}> {
+  return request<{status: string}>("/intelligence/folders/guards", {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ path, guarded }),
+  })
 }
 
 export function tagFile(id: number): Promise<{tags: Tag[]}> {
@@ -472,4 +493,18 @@ export function getUnprocessedCount(watchedDirId?: number): Promise<{count: numb
     return request<{count: number}>("/intelligence/files/unprocessed/count")
   }
   return request<{count: number}>(`/intelligence/files/unprocessed/count?watched_dir_id=${watchedDirId}`)
+}
+
+export interface GenerationStatus {
+  active: boolean
+  stage?: string
+  message?: string
+  progress?: number
+  total?: number
+  started_at?: string
+  completed_at?: string
+}
+
+export function getGenerationStatus(): Promise<GenerationStatus> {
+  return request<GenerationStatus>("/intelligence/folders/suggestions/status")
 }

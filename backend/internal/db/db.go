@@ -22,6 +22,11 @@ func Init(path string) (*sql.DB, error) {
 
 	database.SetMaxOpenConns(1)
 
+	if _, err := database.Exec("PRAGMA foreign_keys=ON"); err != nil {
+		database.Close()
+		return nil, fmt.Errorf("enable foreign keys: %w", err)
+	}
+
 	if _, err := database.Exec("PRAGMA journal_mode=WAL"); err != nil {
 		database.Close()
 		return nil, fmt.Errorf("set WAL mode: %w", err)

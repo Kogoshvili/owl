@@ -56,8 +56,8 @@ func main() {
 		slog.Info("LLM refinement disabled")
 	}
 
-	dataDir, err := ensureDataDir()
-	if err != nil {
+	dataDir := "data"
+	if err := os.MkdirAll(dataDir, 0755); err != nil {
 		slog.Error("failed to create data directory", "error", err)
 		os.Exit(1)
 	}
@@ -68,6 +68,7 @@ func main() {
 		os.Exit(1)
 	}
 	defer database.Close()
+	defer logging.Close()
 
 	s := store.New(database)
 	s.RecoverStuckFiles()
@@ -80,13 +81,4 @@ func main() {
 		slog.Error("server failed", "error", err)
 		os.Exit(1)
 	}
-}
-
-func ensureDataDir() (string, error) {
-	configDir, err := os.UserConfigDir()
-	if err != nil {
-		return "", err
-	}
-	dataDir := filepath.Join(configDir, "owl")
-	return dataDir, os.MkdirAll(dataDir, 0755)
 }

@@ -26,6 +26,9 @@ import {
   addFilesToFolder,
   removeFileFromFolder,
   listPhysicalFolders,
+  listFolderGuards,
+  setFolderGuard,
+  getGenerationStatus,
   tagFile,
   tagFiles,
   tagWatchedDir,
@@ -458,5 +461,32 @@ export function useUnprocessedCount() {
   return useQuery({
     queryKey: ["unprocessedCount"],
     queryFn: () => getUnprocessedCount(),
+  })
+}
+
+export function useGenerationStatus() {
+  return useQuery({
+    queryKey: ["generationStatus"],
+    queryFn: getGenerationStatus,
+    refetchInterval: 2000,
+  })
+}
+
+export function useFolderGuards() {
+  return useQuery({
+    queryKey: ["folderGuards"],
+    queryFn: listFolderGuards,
+  })
+}
+
+export function useSetFolderGuard() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ({ path, guarded }: { path: string; guarded: boolean }) =>
+      setFolderGuard(path, guarded),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["folderGuards"] })
+      queryClient.invalidateQueries({ queryKey: ["physicalFolders"] })
+    },
   })
 }

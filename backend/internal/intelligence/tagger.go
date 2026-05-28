@@ -151,7 +151,7 @@ func (t *Tagger) AutoTagFiles(ctx context.Context, fileIDs []int64, strategyID S
 				continue
 			}
 
-			if !refinement.Meaningful {
+			if !refinement.Keep {
 				slog.Info("auto-tag: LLM rejected tag", "name", tagName)
 				t.store.DeleteTag(tag.ID)
 				for fileID := range result {

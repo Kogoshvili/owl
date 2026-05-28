@@ -268,7 +268,7 @@ func (c *Client) RefineTag(ctx context.Context, tagName string, fileNames []stri
 		break
 	}
 
-	slog.Info("llm: refined tag", "name", tagName, "meaningful", result.Meaningful, "better_name", result.BetterName, "description", result.Description)
+	slog.Info("llm: refined tag", "name", tagName, "keep", result.Keep, "better_name", result.BetterName, "description", result.Description)
 	return result, nil
 }
 
@@ -309,3 +309,62 @@ func (c *Client) ExtractKeywords(ctx context.Context, files []struct{ ID int64; 
 	slog.Info("llm: extracted keywords", "files", len(result))
 	return result, nil
 }
+
+func (c *Client) ClassifyFolder(ctx context.Context, folderName string, subfolders []string, fileNames []string, parentName string, parentGuarded bool) (*FolderClassification, error) {
+	if !c.cfg.Enabled || c.http == nil {
+		return nil, fmt.Errorf("LLM not available")
+	}
+
+	if !c.ready {
+		if !c.IsAvailable(ctx) {
+			return nil, fmt.Errorf("LLM not available")
+		}
+	}
+
+	slog.Info("llm: classifying folder", "folder", folderName, "parent", parentName, "parent_guarded", parentGuarded, "subfolders", len(subfolders), "files", len(fileNames))
+
+	var result *FolderClassification
+	var lastErr error
+
+	for attempt := 1; attempt <= maxRetries; attempt++ {
+		if attempt > 1 {
+			slog.Info("llm: classify folder retry", "attempt", attempt, "last_error", lastErr)
+		}
+
+		prompt := buildFolderGuardPrompt(folderName, subfolders, fileNames, parentName, parentGuarded)
+
+		chatCtx, cancel := context.WithTimeout(context.Background(), clusterRefineTimeout)
+		var rawResponse string
+		var err error
+
+		c.mu.Lock()
+		rawResponse, err = c.chatCompletion(chatCtx, prompt)
+		c.mu.Unlock()
+		cancel()
+
+		if err != nil {
+			lastErr = err
+			if attempt == maxRetries {
+				slog.Error("llm: classify folder failed after retries", "folder", folderName, "error", err)
+				return nil, err
+			}
+			continue
+		}
+
+		result, err = parseFolderGuardResponse(rawResponse)
+		if err != nil {
+			lastErr = err
+			if attempt == maxRetries {
+				slog.Error("llm: parse folder guard response failed after retries", "folder", folderName, "error", err, "raw", rawResponse)
+				return nil, err
+			}
+			slog.Warn("llm: parse folder guard response failed, retrying", "folder", folderName, "attempt", attempt, "error", err)
+			continue
+		}
+
+		break
+	}
+
+		slog.Info("llm: classified folder", "folder", folderName, "related", result.Related, "reason", result.Reason)
+		return result, nil
+	}

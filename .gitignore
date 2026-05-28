@@ -19,3 +19,5 @@ Thumbs.db
 
 owl.db
 test-folder
+backend/data/*
+!backend/data/.gitkeep

@@ -268,7 +268,7 @@ func (s *EmbeddingsStrategy) inferTagName(ctx context.Context, fileIDs []int64) 
 		}
 
 		refinement, err := s.llm.RefineTag(ctx, "auto-group", names, keywords)
-		if err == nil && refinement.Meaningful {
+		if err == nil && refinement.Keep {
 			name := refinement.BetterName
 			if name == "" {
 				name = "auto-group"

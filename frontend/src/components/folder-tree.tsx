@@ -6,9 +6,11 @@ interface Props {
   onSelectFolder: (path: string) => void
   selectedPath: string | null
   coherenceMap?: Record<string, { is_coherent: boolean; avg_similarity: number; file_count: number }>
+  guardMap?: Record<string, boolean>
+  onToggleGuard?: (path: string, guarded: boolean) => void
 }
 
-export function FolderTree({ roots, onSelectFolder, selectedPath, coherenceMap }: Props) {
+export function FolderTree({ roots, onSelectFolder, selectedPath, coherenceMap, guardMap, onToggleGuard }: Props) {
   return (
     <div class="folder-tree">
       {roots.map((root) => (
@@ -19,28 +21,40 @@ export function FolderTree({ roots, onSelectFolder, selectedPath, coherenceMap }
           onSelect={onSelectFolder}
           selectedPath={selectedPath}
           coherenceMap={coherenceMap}
+          guardMap={guardMap}
+          onToggleGuard={onToggleGuard}
         />
       ))}
     </div>
   )
 }
 
-function FolderTreeNode({ folder, depth, onSelect, selectedPath, coherenceMap }: {
+function FolderTreeNode({ folder, depth, onSelect, selectedPath, coherenceMap, guardMap, onToggleGuard }: {
   folder: PhysicalFolder
   depth: number
   onSelect: (path: string) => void
   selectedPath: string | null
   coherenceMap?: Record<string, { is_coherent: boolean; avg_similarity: number; file_count: number }>
+  guardMap?: Record<string, boolean>
+  onToggleGuard?: (path: string, guarded: boolean) => void
 }) {
   const [expanded, setExpanded] = useState(depth < 2)
   const hasChildren = folder.children && folder.children.length > 0
   const isSelected = selectedPath === folder.path
   const coherence = coherenceMap?.[folder.path]
   const showCoherence = depth > 0 && coherence
+  const isGuarded = guardMap?.[folder.path]
 
   const toggleExpanded = () => {
     if (hasChildren) {
       setExpanded(!expanded)
+    }
+  }
+
+  const toggleGuard = (e: MouseEvent) => {
+    e.stopPropagation()
+    if (onToggleGuard) {
+      onToggleGuard(folder.path, !isGuarded)
     }
   }
 
@@ -64,6 +78,15 @@ function FolderTreeNode({ folder, depth, onSelect, selectedPath, coherenceMap }:
             {coherence.is_coherent ? "coherent" : "mixed"}
           </span>
         )}
+        {onToggleGuard && depth > 0 && (
+          <span
+            class={`folder-guard-badge ${isGuarded ? "guarded" : "open"}`}
+            onClick={toggleGuard}
+            title={isGuarded ? "Guarded (click to unguard)" : "Open (click to guard)"}
+          >
+            {isGuarded ? "🔒" : "🔓"}
+          </span>
+        )}
       </div>
       {expanded && hasChildren && (
         <div class="folder-tree-children">
@@ -75,6 +98,8 @@ function FolderTreeNode({ folder, depth, onSelect, selectedPath, coherenceMap }:
               onSelect={onSelect}
               selectedPath={selectedPath}
               coherenceMap={coherenceMap}
+              guardMap={guardMap}
+              onToggleGuard={onToggleGuard}
             />
           ))}
         </div>

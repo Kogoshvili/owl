@@ -79,6 +79,7 @@ func NewRouter(s *store.Store, sc *scanner.Scanner, ext *extractor.Extractor, ll
 	mux.HandleFunc("POST /intelligence/folders/suggestions/{id}/accept", ih.AcceptFolderSuggestion)
 	mux.HandleFunc("DELETE /intelligence/folders/suggestions/{id}", ih.DismissFolderSuggestion)
 	mux.HandleFunc("POST /intelligence/folders/suggestions/refine-all", ih.RefineAllSuggestions)
+	mux.HandleFunc("GET /intelligence/folders/suggestions/status", ih.GetGenerationStatus)
 	mux.HandleFunc("GET /intelligence/tags", ih.ListTags)
 	mux.HandleFunc("POST /intelligence/tags", ih.CreateTag)
 	mux.HandleFunc("GET /intelligence/tags/{id}/files", ih.ListTagFiles)
@@ -87,6 +88,8 @@ func NewRouter(s *store.Store, sc *scanner.Scanner, ext *extractor.Extractor, ll
 	mux.HandleFunc("POST /intelligence/refine/folder/{id}", ih.RefineFolder)
 	mux.HandleFunc("POST /intelligence/refine/tag/{id}", ih.RefineTag)
 	mux.HandleFunc("GET /intelligence/files/unprocessed/count", ih.GetUnprocessedCount)
+	mux.HandleFunc("GET /intelligence/folders/guards", ih.ListFolderGuards)
+	mux.HandleFunc("PUT /intelligence/folders/guards", ih.SetFolderGuard)
 
 	return middleware.Logging(middleware.CORS(mux))
 }

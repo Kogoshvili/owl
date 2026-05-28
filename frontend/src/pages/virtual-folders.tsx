@@ -1,5 +1,5 @@
 import { useState } from "preact/hooks"
-import { useVirtualFolders, useCreateVirtualFolder, useUpdateVirtualFolder, useDeleteVirtualFolder, usePhysicalFolders } from "../hooks/queries"
+import { useVirtualFolders, useCreateVirtualFolder, useUpdateVirtualFolder, useDeleteVirtualFolder, usePhysicalFolders, useFolderGuards, useSetFolderGuard } from "../hooks/queries"
 import { VirtualFolders } from "../components/virtual-folders"
 import { FolderTree } from "../components/folder-tree"
 import { FolderSuggestions } from "../components/folder-suggestions"
@@ -9,11 +9,22 @@ export function VirtualFoldersPage() {
   const [showVirtual, setShowVirtual] = useState(false)
 
   const physicalFoldersQuery = usePhysicalFolders()
+  const folderGuardsQuery = useFolderGuards()
+  const setFolderGuardMutation = useSetFolderGuard()
 
   const foldersQuery = useVirtualFolders("manual")
   const createMutation = useCreateVirtualFolder()
   const updateMutation = useUpdateVirtualFolder()
   const deleteMutation = useDeleteVirtualFolder()
+
+  const guardMap = folderGuardsQuery.data ? folderGuardsQuery.data.reduce((acc, g) => {
+    acc[g.path] = g.guarded
+    return acc
+  }, {} as Record<string, boolean>) : {}
+
+  const handleToggleGuard = (path: string, guarded: boolean) => {
+    setFolderGuardMutation.mutate({ path, guarded })
+  }
 
   return (
     <div class="page vf-page-layout">
@@ -31,6 +42,8 @@ export function VirtualFoldersPage() {
               roots={physicalFoldersQuery.data}
               onSelectFolder={() => {}}
               selectedPath={null}
+              guardMap={guardMap}
+              onToggleGuard={handleToggleGuard}
             />
           </div>
         )}

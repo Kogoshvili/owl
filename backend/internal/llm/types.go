@@ -16,7 +16,7 @@ type RefinementResult struct {
 }
 
 type TagRefinementResult struct {
-	Meaningful  bool
+	Keep        bool
 	BetterName  string
 	Description string
 }
@@ -24,4 +24,9 @@ type TagRefinementResult struct {
 type KeywordExtraction struct {
 	FileID   int64
 	Keywords []string
+}
+
+type FolderClassification struct {
+	Related bool
+	Reason  string
 }
