@@ -999,6 +999,12 @@ tbody tr:hover {
   color: #fff;
 }
 
+.badge-confidence {
+  background: #8b5cf6;
+  color: #fff;
+  font-size: 0.7rem;
+}
+
 .badge-materialized {
   background: #059669;
   color: #fff;
@@ -1797,117 +1803,6 @@ tbody tr:hover {
 
 .toggle-arrow.expanded {
   transform: rotate(90deg);
-}
-
-/* Smart Suggestions */
-.smart-suggestions {
-  height: 100%;
-  display: flex;
-  flex-direction: column;
-}
-
-.smart-suggestions-header {
-  margin-bottom: 12px;
-}
-
-.smart-suggestions-header h2 {
-  margin: 0 0 2px;
-}
-
-.smart-suggestions-hint {
-  font-size: 0.75rem;
-  opacity: 0.5;
-}
-
-.smart-suggestion-list {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  overflow-y: auto;
-  flex: 1;
-}
-
-.smart-suggestion-card {
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  padding: 12px 14px;
-  transition: border-color 0.15s;
-}
-
-.smart-suggestion-card:hover {
-  border-color: var(--accent);
-}
-
-.smart-suggestion-card-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 6px;
-}
-
-.suggestion-type-badge {
-  font-size: 0.7rem;
-  font-weight: 600;
-  padding: 2px 8px;
-  border-radius: 8px;
-  text-transform: uppercase;
-}
-
-.badge-new { background: #e6f4ea; color: #1e7e34; }
-.badge-add { background: #e8f0fe; color: #1967d2; }
-.badge-merge { background: #fef7e0; color: #ea8600; }
-
-.smart-suggestion-confidence {
-  font-size: 0.75rem;
-  opacity: 0.6;
-}
-
-.smart-suggestion-name {
-  font-weight: 600;
-  margin-bottom: 2px;
-}
-
-.smart-suggestion-desc {
-  font-size: 0.8rem;
-  opacity: 0.7;
-  margin-bottom: 4px;
-}
-
-.smart-suggestion-target {
-  font-size: 0.85rem;
-  color: var(--accent);
-  margin: 4px 0;
-}
-
-.smart-suggestion-meta {
-  font-size: 0.75rem;
-  opacity: 0.5;
-  margin-bottom: 4px;
-}
-
-.smart-suggestion-preview {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px;
-  margin: 4px 0;
-}
-
-.smart-suggestion-preview-file {
-  font-size: 0.72rem;
-  background: var(--border);
-  padding: 2px 8px;
-  border-radius: 10px;
-}
-
-.smart-suggestion-preview-more {
-  font-size: 0.72rem;
-  opacity: 0.5;
-}
-
-.smart-suggestion-actions {
-  display: flex;
-  gap: 6px;
-  margin-top: 8px;
 }
 
 .link {

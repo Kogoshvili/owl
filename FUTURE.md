@@ -13,6 +13,9 @@
 ### Intelligence
 - [ ] User feedback loop — confirm/dismiss suggestions, learn from feedback
 - [ ] Min file count thresholds configurable via settings (currently hardcoded: tags=3, folders=3)
+- [ ] `add_to_folder` suggestion type: suggest adding orphan files to an existing coherent virtual folder
+- [ ] `merge_folders` suggestion type: suggest merging two similar sibling folders
+- [ ] UI drag-and-drop: drag file into folder (add), drag folder into folder (merge)
 
 ### Notes & Materialization
 - [ ] Notes frontend (backend done)
@@ -30,3 +33,6 @@
 - [ ] OCR + AI vision for image content understanding
 - [ ] Tauri desktop integration - system tray, native file dialogs
 - [ ] Projects feature
+
+### Tags (v1.2)
+- [ ] Redesign tags system: remove auto-tagging, move to manual only, allow attaching notes to tags

@@ -301,6 +301,8 @@ export interface FolderSuggestion {
   id: number
   name: string
   description: string
+  suggestion_type: string
+  confidence: number
   file_count: number
   preview: string[]
   created_at: string
@@ -336,24 +338,14 @@ export interface FolderCoherence {
   outlier_files: OutlierFile[]
 }
 
-export interface SmartSuggestion {
-  type: "new_folder" | "add_to_folder" | "merge_folders"
-  file_ids: number[]
-  target_path?: string
-  target_id?: number
-  source_paths?: string[]
-  name?: string
-  description?: string
-  confidence: number
-  file_count: number
-  preview?: string[]
-}
-
 export function listStrategies(): Promise<StrategyInfo[]> {
   return request<StrategyInfo[]>("/intelligence/strategies")
 }
 
-export function listPhysicalFolders(watchedDirId: number): Promise<PhysicalFolder[]> {
+export function listPhysicalFolders(watchedDirId?: number): Promise<PhysicalFolder[]> {
+  if (watchedDirId === undefined) {
+    return request<PhysicalFolder[]>("/intelligence/folders/physical")
+  }
   return request<PhysicalFolder[]>(`/intelligence/folders/physical?watched_dir_id=${watchedDirId}`)
 }
 
@@ -363,18 +355,6 @@ export function listPhysicalFolderFiles(path: string): Promise<{path: string, fi
 
 export function analyzeFolderCoherence(path: string): Promise<FolderCoherence> {
   return request<FolderCoherence>(`/intelligence/folders/physical/coherence?path=${encodeURIComponent(path)}`)
-}
-
-export function getSmartSuggestions(watchedDirId: number): Promise<{suggestions: SmartSuggestion[], count: number}> {
-  return request<{suggestions: SmartSuggestion[], count: number}>(`/intelligence/folders/smart-suggest?watched_dir_id=${watchedDirId}`)
-}
-
-export function acceptSmartSuggestion(suggestion: {type: string, file_ids: number[], name?: string, target_id?: number, source_paths?: string[]}): Promise<any> {
-  return request<any>(`/intelligence/folders/smart-suggest/accept`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(suggestion),
-  })
 }
 
 export function tagFile(id: number): Promise<{tags: Tag[]}> {
@@ -475,12 +455,21 @@ export function refineFolder(id: number): Promise<{related: boolean, action: str
   })
 }
 
+export function refineAllFolderSuggestions(): Promise<{status: string, count: number}> {
+  return request<{status: string, count: number}>(`/intelligence/folders/suggestions/refine-all`, {
+    method: "POST",
+  })
+}
+
 export function refineTag(id: number): Promise<{meaningful: boolean, action: string, tag?: Tag}> {
   return request<{meaningful: boolean, action: string, tag?: Tag}>(`/intelligence/refine/tag/${id}`, {
     method: "POST",
   })
 }
 
-export function getUnprocessedCount(watchedDirId: number): Promise<{count: number}> {
+export function getUnprocessedCount(watchedDirId?: number): Promise<{count: number}> {
+  if (watchedDirId === undefined) {
+    return request<{count: number}>("/intelligence/files/unprocessed/count")
+  }
   return request<{count: number}>(`/intelligence/files/unprocessed/count?watched_dir_id=${watchedDirId}`)
 }

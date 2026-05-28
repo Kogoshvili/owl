@@ -159,19 +159,18 @@ func (s *ContentTFIDFStrategy) SuggestFoldersWithCorpus(ctx context.Context, fil
 	slog.Info("strategy[content_tfidf]: clustering complete", "clusters", len(clusters), "elapsed", time.Since(start).String())
 
 	slog.Info("strategy[content_tfidf]: refining and generating suggestions", "clusters", len(clusters))
-	llmAvailable := s.llm != nil && s.llm.IsAvailable(ctx)
-	if llmAvailable {
-		subClustered := [][]int64{}
-		for _, cluster := range clusters {
-			if len(cluster) > maxFilesForLLM {
-				subs := clusterFiles(cluster, similarityMatrix, minSimilarity+subClusterThresholdBoost, minFiles)
-				subClustered = append(subClustered, subs...)
-			} else {
-				subClustered = append(subClustered, cluster)
-			}
+
+	// Always sub-cluster large clusters (regardless of LLM availability)
+	subClustered := [][]int64{}
+	for _, cluster := range clusters {
+		if len(cluster) > maxFilesForLLM {
+			subs := clusterFiles(cluster, similarityMatrix, minSimilarity+subClusterThresholdBoost, minFiles)
+			subClustered = append(subClustered, subs...)
+		} else {
+			subClustered = append(subClustered, cluster)
 		}
-		clusters = subClustered
 	}
+	clusters = subClustered
 
 	fileNames, err := s.analyzer.GetFileNames(fileIDs)
 	if err != nil {
@@ -184,44 +183,14 @@ func (s *ContentTFIDFStrategy) SuggestFoldersWithCorpus(ctx context.Context, fil
 			continue
 		}
 
+		// Use TF-IDF top terms for naming (LLM refinement happens only when user clicks "Refine")
 		name := ""
 		description := ""
-
-		if llmAvailable {
-			cf := s.buildClusterFiles(cluster, corpusKeywords, fileNames)
-			refinement, err := s.llm.RefineCluster(ctx, cf, cluster, name)
-			if err == nil && refinement != nil {
-				if !refinement.Related {
-					continue
-				}
-				name = refinement.Name
-				description = refinement.Description
-				if len(refinement.RemovedIDs) > 0 {
-					removed := make(map[int64]bool)
-					for _, id := range refinement.RemovedIDs {
-						removed[id] = true
-					}
-					filtered := []int64{}
-					for _, id := range cluster {
-						if !removed[id] {
-							filtered = append(filtered, id)
-						}
-					}
-					if len(filtered) < minFiles {
-						continue
-					}
-					cluster = filtered
-				}
-			}
-		}
-
-		if name == "" {
-			terms := topTerms(corpusKeywords, cluster, 3)
-			if len(terms) > 0 {
-				name = fmt.Sprintf("%s files", terms[0])
-			} else {
-				name = "group"
-			}
+		terms := topTerms(corpusKeywords, cluster, 3)
+		if len(terms) > 0 {
+			name = fmt.Sprintf("%s files", terms[0])
+		} else {
+			name = "group"
 		}
 		if description == "" {
 			description = fmt.Sprintf("Auto-generated from %d related files", len(cluster))
@@ -235,9 +204,9 @@ func (s *ContentTFIDFStrategy) SuggestFoldersWithCorpus(ctx context.Context, fil
 			Description: description,
 			FileIDs:     cluster,
 			Score:       score,
-		Preview:     preview,
-	})
-}
+			Preview:     preview,
+		})
+	}
 
 	slog.Info("strategy[content_tfidf]: folder suggestions complete", "suggestions", len(suggestions))
 

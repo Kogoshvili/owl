@@ -136,6 +136,34 @@ func (s *Store) ListPhysicalFolders(watchedDirID int64) ([]*PhysicalFolder, erro
 	return []*PhysicalFolder{root}, nil
 }
 
+func (s *Store) ListPhysicalFoldersAll() ([]*PhysicalFolder, error) {
+	wdRows, err := s.db.Query(`SELECT id, path, recursive, enabled, last_scanned_at, created_at FROM watched_directories ORDER BY created_at`)
+	if err != nil {
+		return nil, err
+	}
+	defer wdRows.Close()
+
+	var watchedDirs []WatchedDir
+	for wdRows.Next() {
+		var wd WatchedDir
+		if err := wdRows.Scan(&wd.ID, &wd.Path, &wd.Recursive, &wd.Enabled, &wd.LastScannedAt, &wd.CreatedAt); err != nil {
+			return nil, err
+		}
+		watchedDirs = append(watchedDirs, wd)
+	}
+
+	var allTrees []*PhysicalFolder
+	for _, wd := range watchedDirs {
+		tree, err := s.ListPhysicalFolders(wd.ID)
+		if err != nil {
+			continue
+		}
+		allTrees = append(allTrees, tree...)
+	}
+
+	return allTrees, nil
+}
+
 func (s *Store) CountFilesInDir(parentDir string) (int, error) {
 	var cnt int
 	err := s.db.QueryRow(`SELECT COUNT(*) FROM files WHERE parent_dir = ? AND status = 'active'`, parentDir).Scan(&cnt)
@@ -206,6 +234,24 @@ func (s *Store) GetWatchedDirPath(id int64) (string, error) {
 
 func (s *Store) ListAllFileIDs(watchedDirID int64) ([]int64, error) {
 	rows, err := s.db.Query(`SELECT id FROM files WHERE watched_dir_id = ? AND status = 'active'`, watchedDirID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var fileIDs []int64
+	for rows.Next() {
+		var id int64
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		fileIDs = append(fileIDs, id)
+	}
+	return fileIDs, rows.Err()
+}
+
+func (s *Store) ListAllFileIDsAll() ([]int64, error) {
+	rows, err := s.db.Query(`SELECT id FROM files WHERE status = 'active'`)
 	if err != nil {
 		return nil, err
 	}

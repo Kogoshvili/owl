@@ -111,7 +111,6 @@ func (s *EmbeddingsStrategy) SuggestFoldersWithCorpus(ctx context.Context, fileI
 		return nil, err
 	}
 
-	llmAvailable := s.llm != nil && s.llm.IsAvailable(ctx)
 	corpusKeywords, _ := s.analyzer.BuildCorpusTFIDF(fileIDs)
 
 	suggestions := make([]FolderSuggestion, 0)
@@ -125,44 +124,14 @@ func (s *EmbeddingsStrategy) SuggestFoldersWithCorpus(ctx context.Context, fileI
 			clusterFileIDs[i] = p.ID
 		}
 
+		// Use TF-IDF top terms for naming (LLM refinement happens only when user clicks "Refine")
 		name := ""
 		description := ""
-
-		if llmAvailable {
-			cf := s.buildClusterFiles(clusterFileIDs, corpusKeywords, fileNames)
-			refinement, err := s.llm.RefineCluster(ctx, cf, clusterFileIDs, name)
-			if err == nil && refinement != nil {
-				if !refinement.Related {
-					continue
-				}
-				name = refinement.Name
-				description = refinement.Description
-				if len(refinement.RemovedIDs) > 0 {
-					removed := make(map[int64]bool)
-					for _, id := range refinement.RemovedIDs {
-						removed[id] = true
-					}
-					filtered := []int64{}
-					for _, id := range clusterFileIDs {
-						if !removed[id] {
-							filtered = append(filtered, id)
-						}
-					}
-					if len(filtered) < MinFilesForFolder {
-						continue
-					}
-					clusterFileIDs = filtered
-				}
-			}
-		}
-
-		if name == "" {
-			terms := topTerms(corpusKeywords, clusterFileIDs, 3)
-			if len(terms) > 0 {
-				name = fmt.Sprintf("%s files", terms[0])
-			} else {
-				name = "group"
-			}
+		terms := topTerms(corpusKeywords, clusterFileIDs, 3)
+		if len(terms) > 0 {
+			name = fmt.Sprintf("%s files", terms[0])
+		} else {
+			name = "group"
 		}
 		if description == "" {
 			description = fmt.Sprintf("Auto-generated from %d related files (embeddings)", len(clusterFileIDs))

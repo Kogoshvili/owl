@@ -26,8 +26,6 @@ import {
   addFilesToFolder,
   removeFileFromFolder,
   listPhysicalFolders,
-  getSmartSuggestions,
-  acceptSmartSuggestion,
   tagFile,
   tagFiles,
   tagWatchedDir,
@@ -40,6 +38,7 @@ import {
   deleteTag,
   acceptTag,
   refineFolder,
+  refineAllFolderSuggestions,
   refineTag,
   listStrategies,
   type SearchScope,
@@ -423,6 +422,19 @@ export function useRefineFolder() {
   })
 }
 
+export function useRefineAllFolderSuggestions() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: () => refineAllFolderSuggestions(),
+    onSuccess: () => {
+      setTimeout(() => {
+        qc.invalidateQueries({ queryKey: ["folderSuggestions"] })
+        qc.invalidateQueries({ queryKey: ["virtualFolders"] })
+      }, 3000)
+    },
+  })
+}
+
 export function useRefineTag() {
   const qc = useQueryClient()
   return useMutation({
@@ -435,48 +447,16 @@ export function useRefineTag() {
   })
 }
 
-export function usePhysicalFolders(watchedDirId: number | null) {
+export function usePhysicalFolders() {
   return useQuery({
-    queryKey: ["physicalFolders", watchedDirId],
-    queryFn: () => listPhysicalFolders(watchedDirId!),
-    enabled: watchedDirId !== null,
+    queryKey: ["physicalFolders"],
+    queryFn: () => listPhysicalFolders(),
   })
 }
 
-export function useSmartSuggestions(watchedDirId: number | null) {
+export function useUnprocessedCount() {
   return useQuery({
-    queryKey: ["smartSuggestions", watchedDirId],
-    queryFn: () => getSmartSuggestions(watchedDirId!),
-    enabled: false,
-  })
-}
-
-export function useGenerateSmartSuggestions() {
-  const qc = useQueryClient()
-  return useMutation({
-    mutationFn: (watchedDirId: number) => getSmartSuggestions(watchedDirId),
-    onSuccess: (data, watchedDirId) => {
-      qc.setQueryData(["smartSuggestions", watchedDirId], data)
-    },
-  })
-}
-
-export function useAcceptSmartSuggestion() {
-  const qc = useQueryClient()
-  return useMutation({
-    mutationFn: (suggestion: Parameters<typeof acceptSmartSuggestion>[0]) =>
-      acceptSmartSuggestion(suggestion),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["smartSuggestions"] })
-      qc.invalidateQueries({ queryKey: ["virtualFolders"] })
-    },
-  })
-}
-
-export function useUnprocessedCount(watchedDirId: number | null) {
-  return useQuery({
-    queryKey: ["unprocessedCount", watchedDirId],
-    queryFn: () => getUnprocessedCount(watchedDirId!),
-    enabled: watchedDirId !== null,
+    queryKey: ["unprocessedCount"],
+    queryFn: () => getUnprocessedCount(),
   })
 }

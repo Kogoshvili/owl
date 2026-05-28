@@ -1,5 +1,5 @@
 import { useState } from "preact/hooks"
-import { useFolderSuggestions, useGenerateFolderSuggestions, useAcceptFolderSuggestion, useDismissFolderSuggestion, useRefineFolder } from "../hooks/queries"
+import { useFolderSuggestions, useGenerateFolderSuggestions, useAcceptFolderSuggestion, useDismissFolderSuggestion, useRefineFolder, useRefineAllFolderSuggestions } from "../hooks/queries"
 import { route } from "preact-router"
 import type { FolderSuggestion } from "../api"
 
@@ -9,6 +9,7 @@ export function FolderSuggestions() {
   const acceptMutation = useAcceptFolderSuggestion()
   const dismissMutation = useDismissFolderSuggestion()
   const refineMutation = useRefineFolder()
+  const refineAllMutation = useRefineAllFolderSuggestions()
   const [generating, setGenerating] = useState(false)
   const [refiningId, setRefiningId] = useState<number | null>(null)
 
@@ -21,7 +22,9 @@ export function FolderSuggestions() {
     } catch (e: any) {
       console.error(e)
     } finally {
-      setGenerating(false)
+      setTimeout(() => {
+        setGenerating(false)
+      }, 10000)
     }
   }
 
@@ -73,12 +76,10 @@ export function FolderSuggestions() {
   }
 
   const handleRefineAll = async () => {
-    for (const s of suggestions) {
-      try {
-        await refineMutation.mutateAsync(s.id)
-      } catch (e: any) {
-        console.error(e)
-      }
+    try {
+      await refineAllMutation.mutateAsync()
+    } catch (e: any) {
+      console.error(e)
     }
   }
 
@@ -96,7 +97,7 @@ export function FolderSuggestions() {
           </button>
           {suggestions.length > 0 && (
             <>
-              <button class="btn btn-sm" onClick={handleRefineAll} disabled={refineMutation.isPending}>
+              <button class="btn btn-sm" onClick={handleRefineAll} disabled={refineAllMutation.isPending}>
                 Refine All
               </button>
               <button class="btn btn-sm" onClick={handleAcceptAll} disabled={acceptMutation.isPending}>
@@ -147,6 +148,9 @@ function SuggestionCard({ suggestion, onAccept, onDismiss, onRefine, accepting, 
       <div class="suggestion-card-header">
         <span class="suggestion-name">{suggestion.name}</span>
         <span class="badge badge-auto">auto</span>
+        {suggestion.confidence > 0 && (
+          <span class="badge badge-confidence">{Math.round(suggestion.confidence * 100)}%</span>
+        )}
       </div>
       {suggestion.description && (
         <div class="suggestion-desc">{suggestion.description}</div>
