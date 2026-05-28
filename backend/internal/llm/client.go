@@ -1,18 +1,20 @@
 package llm
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
+	"io"
 	"log/slog"
+	"net/http"
 	"sync"
 	"time"
-
-	"github.com/ollama/ollama/api"
 )
 
 type Client struct {
 	cfg   ClientConfig
-	cli   *api.Client
+	http  *http.Client
 	ready bool
 	mu    sync.Mutex
 }
@@ -22,28 +24,101 @@ func NewClient(cfg ClientConfig) *Client {
 		return &Client{cfg: cfg, ready: false}
 	}
 
-	cli, err := api.ClientFromEnvironment()
-	if err != nil {
-		slog.Warn("llm: failed to create client", "error", err)
-		return &Client{cfg: cfg, ready: false}
-	}
-
 	return &Client{
-		cfg:   cfg,
-		cli:   cli,
+		cfg: cfg,
+		http: &http.Client{
+			Timeout: 120 * time.Second,
+		},
 		ready: false,
 	}
+}
+
+// --- OpenAI-compatible API types ---
+
+type chatMessage struct {
+	Role    string `json:"role"`
+	Content string `json:"content"`
+}
+
+type chatRequest struct {
+	Model    string        `json:"model"`
+	Messages []chatMessage `json:"messages"`
+	Stream   bool          `json:"stream"`
+}
+
+type chatChoice struct {
+	Message chatMessage `json:"message"`
+}
+
+type chatResponse struct {
+	Choices []chatChoice `json:"choices"`
+}
+
+type modelList struct {
+	Data []struct {
+		ID string `json:"id"`
+	} `json:"data"`
 }
 
 const (
 	clusterRefineTimeout = 120 * time.Second
 	tagRefineTimeout     = 120 * time.Second
-	heartbeatTimeout    = 2 * time.Second
+	heartbeatTimeout     = 5 * time.Second
 	maxRetries           = 3
 )
 
+// chatCompletion sends a prompt to the OpenAI-compatible chat completion endpoint
+// and returns the raw response text.
+func (c *Client) chatCompletion(ctx context.Context, prompt string) (string, error) {
+	body := chatRequest{
+		Model: c.cfg.Model,
+		Messages: []chatMessage{
+			{Role: "user", Content: prompt},
+		},
+		Stream: false,
+	}
+
+	reqBody, err := json.Marshal(body)
+	if err != nil {
+		return "", fmt.Errorf("marshalling request: %w", err)
+	}
+
+	url := c.cfg.BaseURL + "/chat/completions"
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(reqBody))
+	if err != nil {
+		return "", fmt.Errorf("creating request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := c.http.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("sending request: %w", err)
+	}
+	defer resp.Body.Close()
+
+	respBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", fmt.Errorf("reading response: %w", err)
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("API returned status %d: %s", resp.StatusCode, string(respBody))
+	}
+
+	var chatResp chatResponse
+	if err := json.Unmarshal(respBody, &chatResp); err != nil {
+		return "", fmt.Errorf("parsing response: %w", err)
+	}
+
+	if len(chatResp.Choices) == 0 {
+		return "", fmt.Errorf("no choices in response")
+	}
+
+	return chatResp.Choices[0].Message.Content, nil
+}
+
 func (c *Client) IsAvailable(ctx context.Context) bool {
-	if !c.cfg.Enabled || c.cli == nil {
+	if !c.cfg.Enabled || c.http == nil {
 		return false
 	}
 
@@ -54,9 +129,23 @@ func (c *Client) IsAvailable(ctx context.Context) bool {
 	checkCtx, cancel := context.WithTimeout(context.Background(), heartbeatTimeout)
 	defer cancel()
 
-	err := c.cli.Heartbeat(checkCtx)
+	// Use GET /v1/models as a lightweight health check
+	url := c.cfg.BaseURL + "/models"
+	req, err := http.NewRequestWithContext(checkCtx, http.MethodGet, url, nil)
+	if err != nil {
+		slog.Debug("llm: heartbeat request failed", "error", err)
+		return false
+	}
+
+	resp, err := c.http.Do(req)
 	if err != nil {
 		slog.Debug("llm: heartbeat failed, will retry", "error", err)
+		return false
+	}
+	resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		slog.Debug("llm: heartbeat returned non-OK status", "status", resp.StatusCode)
 		return false
 	}
 
@@ -66,18 +155,14 @@ func (c *Client) IsAvailable(ctx context.Context) bool {
 }
 
 func (c *Client) RefineCluster(ctx context.Context, files []ClusterFile, fileIDs []int64, currentName string) (*RefinementResult, error) {
-	if !c.cfg.Enabled || c.cli == nil {
+	if !c.cfg.Enabled || c.http == nil {
 		return nil, fmt.Errorf("LLM not available")
 	}
 
 	if !c.ready {
-		checkCtx, cancel := context.WithTimeout(context.Background(), heartbeatTimeout)
-		defer cancel()
-		if err := c.cli.Heartbeat(checkCtx); err != nil {
-			slog.Debug("llm: heartbeat failed", "error", err)
+		if !c.IsAvailable(ctx) {
 			return nil, fmt.Errorf("LLM not available")
 		}
-		c.ready = true
 	}
 
 	slog.Info("llm: refining cluster", "name", currentName, "files", len(files))
@@ -92,25 +177,12 @@ func (c *Client) RefineCluster(ctx context.Context, files []ClusterFile, fileIDs
 
 		prompt := buildClusterPrompt(files, currentName)
 
-		messages := []api.Message{
-			{Role: "user", Content: prompt},
-		}
-
-		req := &api.ChatRequest{
-			Model:    c.cfg.Model,
-			Messages: messages,
-			Stream:   new(bool),
-		}
-
 		chatCtx, cancel := context.WithTimeout(context.Background(), clusterRefineTimeout)
 		var rawResponse string
 		var err error
 
 		c.mu.Lock()
-		err = c.cli.Chat(chatCtx, req, func(resp api.ChatResponse) error {
-			rawResponse += resp.Message.Content
-			return nil
-		})
+		rawResponse, err = c.chatCompletion(chatCtx, prompt)
 		c.mu.Unlock()
 		cancel()
 
@@ -137,23 +209,19 @@ func (c *Client) RefineCluster(ctx context.Context, files []ClusterFile, fileIDs
 		break
 	}
 
-	slog.Info("llm: refined cluster", "name", result.Name, "related", result.Related, "removed", len(result.RemovedIDs), "description", result.Description, "reason", result.Reason)
+	slog.Info("llm: refined cluster", "name", result.Name, "related", result.Related, "removed", len(result.RemovedIDs), "description", result.Description)
 	return result, nil
 }
 
 func (c *Client) RefineTag(ctx context.Context, tagName string, fileNames []string, keywords []string) (*TagRefinementResult, error) {
-	if !c.cfg.Enabled || c.cli == nil {
+	if !c.cfg.Enabled || c.http == nil {
 		return nil, fmt.Errorf("LLM not available")
 	}
 
 	if !c.ready {
-		checkCtx, cancel := context.WithTimeout(context.Background(), heartbeatTimeout)
-		defer cancel()
-		if err := c.cli.Heartbeat(checkCtx); err != nil {
-			slog.Debug("llm: heartbeat failed", "error", err)
+		if !c.IsAvailable(ctx) {
 			return nil, fmt.Errorf("LLM not available")
 		}
-		c.ready = true
 	}
 
 	slog.Info("llm: refining tag", "name", tagName, "files", len(fileNames))
@@ -168,25 +236,12 @@ func (c *Client) RefineTag(ctx context.Context, tagName string, fileNames []stri
 
 		prompt := buildTagPrompt(tagName, fileNames, keywords)
 
-		messages := []api.Message{
-			{Role: "user", Content: prompt},
-		}
-
-		req := &api.ChatRequest{
-			Model:    c.cfg.Model,
-			Messages: messages,
-			Stream:   new(bool),
-		}
-
 		chatCtx, cancel := context.WithTimeout(context.Background(), tagRefineTimeout)
 		var rawResponse string
 		var err error
 
 		c.mu.Lock()
-		err = c.cli.Chat(chatCtx, req, func(resp api.ChatResponse) error {
-			rawResponse += resp.Message.Content
-			return nil
-		})
+		rawResponse, err = c.chatCompletion(chatCtx, prompt)
 		c.mu.Unlock()
 		cancel()
 
@@ -213,6 +268,6 @@ func (c *Client) RefineTag(ctx context.Context, tagName string, fileNames []stri
 		break
 	}
 
-	slog.Info("llm: refined tag", "name", tagName, "meaningful", result.Meaningful, "better_name", result.BetterName, "description", result.Description, "reason", result.Reason)
+	slog.Info("llm: refined tag", "name", tagName, "meaningful", result.Meaningful, "better_name", result.BetterName, "description", result.Description)
 	return result, nil
 }

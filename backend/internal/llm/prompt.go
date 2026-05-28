@@ -22,13 +22,12 @@ Determine:
 2. Which files don't belong? (list by number, e.g., "2, 5")
 3. Suggest a concise folder name (2-4 words, specific not generic)
 4. Write a one-sentence description of what these files share
-5. Write a brief explanation (1-2 sentences) of why these files belong together
 
 Files:
 ` + strings.Join(fileStrings, "\n") + `
 
 Respond ONLY with valid JSON (no markdown):
-{"related": true, "removed": [2,5], "name": "Specific Name", "description": "One sentence description", "reason": "Brief explanation of why these files belong together"}`
+{"related": true, "removed": [2,5], "name": "Specific Name", "description": "One sentence description"}`
 }
 
 func buildTagPrompt(tagName string, fileNames []string, keywords []string) string {
@@ -48,10 +47,9 @@ Determine:
 1. Is this tag meaningful? (tags like "data", "file", "self" are not meaningful)
 2. Suggest a better, more specific tag name (2-3 words) if the current one is vague
 3. Write a one-sentence description of what this tag represents
-4. Write a brief explanation (1-2 sentences) of why this tag is or isn't meaningful
 
 Respond ONLY with valid JSON (no markdown):
-{"meaningful": true, "better_name": "specific name", "description": "One sentence description", "reason": "Brief explanation of why this tag is or isn't meaningful"}`
+{"meaningful": true, "better_name": "specific name", "description": "One sentence description"}`
 }
 
 func parseClusterResponse(raw string, fileIDs []int64) (*RefinementResult, error) {
@@ -61,11 +59,10 @@ func parseClusterResponse(raw string, fileIDs []int64) (*RefinementResult, error
 	raw = strings.TrimSuffix(raw, "```")
 
 	var result struct {
-		Related    bool   `json:"related"`
-		Removed    []int  `json:"removed"`
-		Name       string `json:"name"`
+		Related     bool   `json:"related"`
+		Removed     []int  `json:"removed"`
+		Name        string `json:"name"`
 		Description string `json:"description"`
-		Reason     string `json:"reason"`
 	}
 	if err := json.Unmarshal([]byte(raw), &result); err != nil {
 		return nil, err
@@ -84,7 +81,6 @@ func parseClusterResponse(raw string, fileIDs []int64) (*RefinementResult, error
 		RemovedIDs:  removedIDs,
 		Name:        result.Name,
 		Description: result.Description,
-		Reason:      result.Reason,
 	}, nil
 }
 

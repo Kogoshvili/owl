@@ -16,8 +16,8 @@ You can override the path with the `OWL_CONFIG` environment variable.
 {
   "llm": {
     "enabled": true,
-    "base_url": "http://localhost:11434",
-    "model": "gemma3:4b"
+    "base_url": "http://localhost:1234/v1",
+    "model": ""
   }
 }
 ```
@@ -29,20 +29,32 @@ Environment variables override the config file settings:
 | Variable | Description | Default |
 |----------|-------------|---------|
 | `LLM_ENABLED` | Enable LLM refinement | `false` |
-| `LLM_BASE_URL` | Ollama API URL | `http://localhost:11434` |
-| `LLM_MODEL` | LLM model to use | `gemma3:4b` |
+| `LLM_BASE_URL` | OpenAI-compatible API URL | `http://localhost:1234/v1` |
+| `LLM_MODEL` | LLM model to use (supplied by server) | `""` (auto) |
 
 ## LLM Configuration
 
 To use LLM refinement for folder suggestions and auto-tagging:
 
-1. Install and run Ollama: `ollama serve`
-2. Pull a model: `ollama pull gemma3:4b`
-3. Enable in config: Set `llm.enabled: true` or `LLM_ENABLED=true`
+### Using LM Studio (recommended)
+
+1. Download and install [LM Studio](https://lmstudio.ai/)
+2. Open LM Studio and load a model (e.g., `gemma-3-4b-it`, `llama-3.1-8b`)
+3. Start the local inference server (click "Start Server" button)
+   - By default it runs at `http://localhost:1234`
+4. Enable in config: Set `llm.enabled: true` or `LLM_ENABLED=true`
+
+**Note:** The `model` field can be left empty (`""`) — LM Studio uses whichever model you have loaded in the server. You only need to set it if you're using a multi-model proxy.
+
+### Using any OpenAI-compatible API
+
+This works with any OpenAI-compatible API endpoint. Simply set:
+- `base_url`: The API base URL (e.g., `http://localhost:1234/v1`)
+- `model`: The model name (if required by your API)
 
 Recommended models:
-- `gemma3:4b` — Small, fast (~2-3s per cluster), good enough for this task
-- `llama3.1:8b` — Higher quality, but slower (~5-10s per cluster)
+- `gemma-3-4b-it` — Small, fast (~2-3s per cluster), good enough for this task
+- `llama-3.1-8b` — Higher quality, but slower (~5-10s per cluster)
 
 ## Log Level
 

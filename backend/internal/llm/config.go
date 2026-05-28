@@ -15,8 +15,8 @@ func ConfigFromEnv(cfg *config.Config) ClientConfig {
 	if cfg == nil || !cfg.LLM.Enabled {
 		return ClientConfig{
 			Enabled: false,
-			BaseURL: "http://localhost:11434",
-			Model:   "gemma3:4b",
+			BaseURL: "http://localhost:1234/v1",
+			Model:   "",
 		}
 	}
 

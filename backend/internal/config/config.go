@@ -20,8 +20,8 @@ func Load(configPath string) (*Config, error) {
 	cfg := &Config{
 		LLM: LLMConfig{
 			Enabled: false,
-			BaseURL: "http://localhost:11434",
-			Model:   "gemma3:4b",
+			BaseURL: "http://localhost:1234/v1",
+			Model:   "",
 		},
 	}
 

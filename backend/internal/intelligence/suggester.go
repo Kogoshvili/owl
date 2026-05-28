@@ -126,7 +126,7 @@ func (s *Suggester) SuggestVirtualFolders(ctx context.Context, minFiles int, min
 				 refinement, err := s.llm.RefineCluster(ctx, files, cluster, name)
 				if err == nil && refinement != nil {
 					if !refinement.Related {
-						slog.Debug("suggester: LLM rejected cluster", "files", len(cluster), "reason", refinement.Reason)
+						slog.Debug("suggester: LLM rejected cluster", "files", len(cluster))
 						continue
 					}
 					name = refinement.Name

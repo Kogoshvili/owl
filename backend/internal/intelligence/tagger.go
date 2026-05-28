@@ -194,7 +194,7 @@ func (t *Tagger) AutoTagFiles(ctx context.Context, fileIDs []int64) (map[int64][
 			}
 
 			if !refinement.Meaningful {
-				slog.Info("auto-tag: LLM rejected tag", "name", tagName, "reason", refinement.Reason)
+				slog.Info("auto-tag: LLM rejected tag", "name", tagName)
 				t.store.DeleteTag(tag.ID)
 				for _, fileID := range fileIDs {
 					if tags, ok := result[fileID]; ok {
@@ -211,7 +211,7 @@ func (t *Tagger) AutoTagFiles(ctx context.Context, fileIDs []int64) (map[int64][
 			}
 
 			if refinement.BetterName != "" && refinement.BetterName != tagName {
-				slog.Info("auto-tag: LLM renamed tag", "from", tagName, "to", refinement.BetterName, "reason", refinement.Reason)
+				slog.Info("auto-tag: LLM renamed tag", "from", tagName, "to", refinement.BetterName)
 				_ = t.store.UpdateTagName(tag.ID, refinement.BetterName)
 			}
 

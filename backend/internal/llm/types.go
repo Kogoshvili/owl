@@ -13,12 +13,10 @@ type RefinementResult struct {
 	RemovedIDs  []int64
 	Name        string
 	Description string
-	Reason      string
 }
 
 type TagRefinementResult struct {
-	Meaningful bool
-	BetterName string
+	Meaningful  bool
+	BetterName  string
 	Description string
-	Reason      string
 }

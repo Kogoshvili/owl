@@ -449,7 +449,7 @@ func (h *IntelligenceHandler) RefineFolder(w http.ResponseWriter, r *http.Reques
 		}
 
 		if !refinement.Related {
-			slog.Info("llm: folder not related, deleting", "id", id, "name", folder.Name, "reason", refinement.Reason)
+			slog.Info("llm: folder not related, deleting", "id", id, "name", folder.Name)
 			h.store.DeleteVirtualFolder(id)
 			return
 		}
@@ -461,7 +461,7 @@ func (h *IntelligenceHandler) RefineFolder(w http.ResponseWriter, r *http.Reques
 				slog.Error("llm: refine folder failed to update", "id", id, "error", err)
 				return
 			}
-			slog.Info("llm: folder refined", "id", id, "name", folder.Name, "new_name", refinement.Name, "description", refinement.Description, "reason", refinement.Reason)
+			slog.Info("llm: folder refined", "id", id, "name", folder.Name, "new_name", refinement.Name, "description", refinement.Description)
 		}
 
 		if len(refinement.RemovedIDs) > 0 {
@@ -535,19 +535,17 @@ func (h *IntelligenceHandler) RefineTag(w http.ResponseWriter, r *http.Request) 
 		}
 
 		if !refinement.Meaningful {
-			slog.Info("llm: tag not meaningful, deleting", "id", id, "name", tag.Name, "reason", refinement.Reason)
+			slog.Info("llm: tag not meaningful, deleting", "id", id, "name", tag.Name)
 			h.store.DeleteTag(id)
 			return
 		}
 
-		changed := false
 		if refinement.BetterName != "" && refinement.BetterName != tag.Name {
 			if err := h.store.UpdateTagName(id, refinement.BetterName); err != nil {
 				slog.Error("llm: refine tag failed to rename", "id", id, "error", err)
 				return
 			}
-			changed = true
-			slog.Info("llm: tag refined", "id", id, "old_name", tag.Name, "new_name", refinement.BetterName, "reason", refinement.Reason)
+			slog.Info("llm: tag refined", "id", id, "old_name", tag.Name, "new_name", refinement.BetterName)
 		}
 
 		if refinement.Description != "" {
@@ -555,12 +553,7 @@ func (h *IntelligenceHandler) RefineTag(w http.ResponseWriter, r *http.Request) 
 				slog.Error("llm: refine tag failed to set description", "id", id, "error", err)
 				return
 			}
-			slog.Info("llm: tag refined", "id", id, "name", tag.Name, "description", refinement.Description, "reason", refinement.Reason)
-			changed = true
-		}
-
-		if !changed && refinement.Reason != "" {
-			slog.Info("llm: tag refined (no changes needed)", "id", id, "name", tag.Name, "reason", refinement.Reason)
+			slog.Info("llm: tag refined", "id", id, "name", tag.Name, "description", refinement.Description)
 		}
 	}()
 
