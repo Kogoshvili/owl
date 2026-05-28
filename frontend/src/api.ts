@@ -387,14 +387,12 @@ export function tagFiles(params?: {
   extension?: string
   processing_status?: string
   limit?: number
-  strategy?: string
 }): Promise<{count: number, tagged: number, tag_count: number}> {
   const p = new URLSearchParams()
   if (params?.watched_dir_id) p.set("watched_dir_id", String(params.watched_dir_id))
   if (params?.extension) p.set("extension", params.extension)
   if (params?.processing_status) p.set("processing_status", params.processing_status)
   if (params?.limit) p.set("limit", String(params.limit))
-  if (params?.strategy) p.set("strategy", params.strategy)
   return request<{count: number, tagged: number, tag_count: number}>(`/intelligence/files/tag?${p}`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -417,11 +415,8 @@ export function generateFolderSuggestions(params?: {
   description?: string
   min_files?: number
   min_similarity?: number
-  strategy?: string
 }): Promise<{created: VirtualFolder[]}> {
-  const p = new URLSearchParams()
-  if (params?.strategy) p.set("strategy", params.strategy)
-  return request<{created: VirtualFolder[]}>(`/intelligence/folders/suggestions${p.toString() ? "?" + p : ""}`, {
+  return request<{created: VirtualFolder[]}>("/intelligence/folders/suggestions", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(params || {}),

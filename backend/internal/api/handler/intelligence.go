@@ -167,7 +167,7 @@ func (h *IntelligenceHandler) TagFiles(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	strategyID := intelligence.ParseStrategyID(r.URL.Query().Get("strategy"))
+	strategyID := h.folderStrategy
 
 	filter := store.FileFilter{
 		Extension:        req.Extension,
@@ -220,7 +220,7 @@ func (h *IntelligenceHandler) TagWatchedDir(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	strategyID := intelligence.ParseStrategyID(r.URL.Query().Get("strategy"))
+	strategyID := h.folderStrategy
 
 	filter := store.FileFilter{
 		WatchedDirID: &dirID,
@@ -311,7 +311,7 @@ func (h *IntelligenceHandler) GenerateSuggestions(w http.ResponseWriter, r *http
 		return
 	}
 
-	strategyID := intelligence.ParseStrategyID(r.URL.Query().Get("strategy"))
+	strategyID := h.folderStrategy
 
 	minFiles := intelligence.MinFilesForFolder
 	if req.MinFiles != nil && *req.MinFiles > 0 {
@@ -326,7 +326,7 @@ func (h *IntelligenceHandler) GenerateSuggestions(w http.ResponseWriter, r *http
 	slog.Info("generating folder suggestions (async)", "min_files", minFiles, "min_similarity", minSimilarity, "strategy", strategyID)
 
 	h.clearGenerationStatus()
-	go h.generateSuggestionsAsync(r.Context(), minFiles, minSimilarity, strategyID)
+	go h.generateSuggestionsAsync(context.Background(), minFiles, minSimilarity, strategyID)
 
 	writeJSON(w, http.StatusAccepted, map[string]any{"status": "generating", "message": "Suggestions are being generated in the background. Poll GET /intelligence/folders/suggestions for progress."})
 }

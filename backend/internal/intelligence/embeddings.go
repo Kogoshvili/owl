@@ -106,12 +106,20 @@ func (s *EmbeddingsStrategy) SuggestFoldersWithCorpus(ctx context.Context, fileI
 
 	clusters := cluster.DBSCAN(points, 0.4, MinFilesForFolder)
 
+	{
+		compSizes := map[int]int{}
+		for _, cl := range clusters {
+			compSizes[len(cl.Points)]++
+		}
+		slog.Info("strategy[embeddings]: dbscan clusters", "clusters", len(clusters), "points", len(points), "size_distribution", fmt.Sprintf("%v", compSizes))
+	}
+
 	fileNames, err := s.analyzer.GetFileNames(fileIDs)
 	if err != nil {
 		return nil, err
 	}
 
-	corpusKeywords, _ := s.analyzer.BuildCorpusTFIDF(fileIDs)
+	corpusKeywords, _ := s.analyzer.BuildCorpusTFIDFWithFallback(fileIDs)
 
 	suggestions := make([]FolderSuggestion, 0)
 	for _, cl := range clusters {
@@ -256,7 +264,7 @@ func (s *EmbeddingsStrategy) inferTagName(ctx context.Context, fileIDs []int64) 
 	if s.llm != nil && s.llm.IsAvailable(ctx) {
 		keywords := []string{}
 		for _, id := range fileIDs {
-			kws, err := s.analyzer.GetFileKeywords(id, 3)
+			kws, err := s.analyzer.GetFileKeywordsWithFallback(id, 3)
 			if err == nil {
 				for _, kw := range kws {
 					keywords = append(keywords, kw.Term)
