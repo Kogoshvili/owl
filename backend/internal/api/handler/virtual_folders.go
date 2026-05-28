@@ -69,9 +69,6 @@ func (h *VirtualFolderHandler) Get(w http.ResponseWriter, r *http.Request) {
 	if detail.Files == nil {
 		detail.Files = []store.File{}
 	}
-	if detail.Notes == nil {
-		detail.Notes = []store.Note{}
-	}
 	writeJSON(w, http.StatusOK, detail)
 }
 

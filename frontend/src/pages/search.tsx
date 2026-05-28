@@ -1,14 +1,13 @@
 import { useState, useEffect, useRef } from "preact/hooks"
 import { route } from "preact-router"
 import { useSearch } from "../hooks/queries"
-import { ALL_SCOPES, type SearchScope, type SearchFileResult, type SearchNoteResult } from "../api"
+import { ALL_SCOPES, type SearchScope, type SearchFileResult } from "../api"
 
 const SCOPE_LABELS: Record<SearchScope, string> = {
   filenames: "Filenames",
   content: "Content",
   comments: "Comments",
   tags: "Tags",
-  notes: "Notes",
 }
 
 const SOURCE_COLORS: Record<string, string> = {
@@ -51,8 +50,6 @@ export function SearchPage() {
   const hasQuery = debounced.length >= 2
   const results = searchQuery.data
   const fileCount = results?.files?.length ?? 0
-  const noteCount = results?.notes?.length ?? 0
-  const totalCount = fileCount + noteCount
 
   return (
     <div class="page search-page">
@@ -65,7 +62,7 @@ export function SearchPage() {
           ref={inputRef}
           type="text"
           class="search-input"
-          placeholder="Search files, notes, tags, comments..."
+          placeholder="Search files, tags, comments..."
           value={query}
           onInput={(e) => setQuery((e.target as HTMLInputElement).value)}
         />
@@ -103,9 +100,9 @@ export function SearchPage() {
       {hasQuery && !searchQuery.isLoading && results && (
         <>
           <div class="search-summary">
-            {totalCount === 0
+            {fileCount === 0
               ? "No results found"
-              : `${totalCount} result${totalCount !== 1 ? "s" : ""} (${fileCount} file${fileCount !== 1 ? "s" : ""}, ${noteCount} note${noteCount !== 1 ? "s" : ""})`}
+              : `${fileCount} result${fileCount !== 1 ? "s" : ""}`}
           </div>
 
           {fileCount > 0 && (
@@ -123,29 +120,6 @@ export function SearchPage() {
                       </div>
                     </div>
                     <div class="search-result-path" title={r.path}>{r.path}</div>
-                    {r.snippet && (
-                      <div class="search-result-snippet">{r.snippet}</div>
-                    )}
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {noteCount > 0 && (
-            <div class="search-section">
-              <h3>Notes</h3>
-              <div class="search-results">
-                {results.notes.map((r: SearchNoteResult) => (
-                  <div class="search-result" key={r.note_id}>
-                    <div class="search-result-top">
-                      <span class="search-result-name">{r.title}</span>
-                      <div class="search-result-badges">
-                        {r.match_sources.map((s) => (
-                          <span key={s} class={`match-badge ${SOURCE_COLORS[s] ?? ""}`}>{s}</span>
-                        ))}
-                      </div>
-                    </div>
                     {r.snippet && (
                       <div class="search-result-snippet">{r.snippet}</div>
                     )}

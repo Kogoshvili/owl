@@ -190,16 +190,6 @@ export interface VirtualFolder {
   created_at: string
 }
 
-export interface Note {
-  id: number
-  title: string
-  content: string
-  materialized: boolean
-  materialized_path: string | null
-  created_at: string
-  updated_at: string
-}
-
 export interface VirtualFolderDetail {
   id: number
   name: string
@@ -209,7 +199,6 @@ export interface VirtualFolderDetail {
   materialized_path: string | null
   created_at: string
   files: File[]
-  notes: Note[]
 }
 
 export function getVirtualFolders(source?: string): Promise<VirtualFolder[]> {
@@ -265,20 +254,11 @@ export interface SearchFileResult {
   match_sources: string[]
 }
 
-export interface SearchNoteResult {
-  note_id: number
-  title: string
-  rank: number
-  snippet: string
-  match_sources: string[]
-}
-
 export interface SearchResults {
   files: SearchFileResult[]
-  notes: SearchNoteResult[]
 }
 
-export const ALL_SCOPES = ["filenames", "content", "comments", "tags", "notes"] as const
+export const ALL_SCOPES = ["filenames", "content", "comments", "tags"] as const
 export type SearchScope = typeof ALL_SCOPES[number]
 
 export function searchFiles(query: string, scopes?: SearchScope[]): Promise<SearchResults> {

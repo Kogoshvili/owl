@@ -15,20 +15,11 @@ type SearchFileResult struct {
 	MatchSources []string `json:"match_sources"`
 }
 
-type SearchNoteResult struct {
-	NoteID       int64    `json:"note_id"`
-	Title        string   `json:"title"`
-	Rank         float64  `json:"rank"`
-	Snippet      string   `json:"snippet"`
-	MatchSources []string `json:"match_sources"`
-}
-
 type SearchResults struct {
 	Files []SearchFileResult `json:"files"`
-	Notes []SearchNoteResult `json:"notes"`
 }
 
-var allScopes = []string{"filenames", "content", "comments", "tags", "notes"}
+var allScopes = []string{"filenames", "content", "comments", "tags"}
 
 func parseScopes(scopes string) map[string]bool {
 	if scopes == "" {
@@ -187,65 +178,6 @@ func (s *Store) searchFilesByTag(query string, limit int) ([]SearchFileResult, e
 	return results, rows.Err()
 }
 
-func (s *Store) searchNotesFTS(query string, limit int) ([]SearchNoteResult, error) {
-	if limit <= 0 {
-		limit = 20
-	}
-	rows, err := s.db.Query(
-		`SELECT note_id, title, rank, snippet(notes_fts, -1, '...', '...', '...', 32)
-		 FROM notes_fts WHERE notes_fts MATCH ? ORDER BY rank LIMIT ?`,
-		query, limit,
-	)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	var results []SearchNoteResult
-	for rows.Next() {
-		var r SearchNoteResult
-		if err := rows.Scan(&r.NoteID, &r.Title, &r.Rank, &r.Snippet); err != nil {
-			return nil, err
-		}
-		r.MatchSources = []string{"content"}
-		results = append(results, r)
-	}
-	return results, rows.Err()
-}
-
-func (s *Store) searchNotesByTag(query string, limit int) ([]SearchNoteResult, error) {
-	if limit <= 0 {
-		limit = 20
-	}
-	pattern := "%" + query + "%"
-	rows, err := s.db.Query(
-		`SELECT DISTINCT n.id, n.title, t.name
-		 FROM notes n
-		 JOIN note_tags nt ON n.id = nt.note_id
-		 JOIN tags t ON nt.tag_id = t.id
-		 WHERE t.name LIKE ?
-		 ORDER BY n.title LIMIT ?`,
-		pattern, limit,
-	)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	var results []SearchNoteResult
-	for rows.Next() {
-		var r SearchNoteResult
-		var tagName string
-		if err := rows.Scan(&r.NoteID, &r.Title, &tagName); err != nil {
-			return nil, err
-		}
-		r.Snippet = fmt.Sprintf("tag: %s", tagName)
-		r.MatchSources = []string{"tag"}
-		results = append(results, r)
-	}
-	return results, rows.Err()
-}
-
 func (s *Store) Search(query string, scopes string, limit int) (*SearchResults, error) {
 	if limit <= 0 {
 		limit = 20
@@ -253,7 +185,6 @@ func (s *Store) Search(query string, scopes string, limit int) (*SearchResults, 
 	active := parseScopes(scopes)
 
 	var allFiles []SearchFileResult
-	var allNotes []SearchNoteResult
 
 	if active["filenames"] {
 		results, err := s.searchFilenames(query, limit)
@@ -285,33 +216,14 @@ func (s *Store) Search(query string, scopes string, limit int) (*SearchResults, 
 			return nil, fmt.Errorf("search file tags: %w", err)
 		}
 		allFiles = append(allFiles, results...)
-
-		noteResults, err := s.searchNotesByTag(query, limit)
-		if err != nil {
-			return nil, fmt.Errorf("search note tags: %w", err)
-		}
-		allNotes = append(allNotes, noteResults...)
-	}
-
-	if active["notes"] {
-		results, err := s.searchNotesFTS(query, limit)
-		if err != nil {
-			return nil, fmt.Errorf("search notes: %w", err)
-		}
-		allNotes = append(allNotes, results...)
 	}
 
 	dedupedFiles := dedupeFileResults(allFiles)
-	dedupedNotes := dedupeNoteResults(allNotes)
-
 	if dedupedFiles == nil {
 		dedupedFiles = []SearchFileResult{}
 	}
-	if dedupedNotes == nil {
-		dedupedNotes = []SearchNoteResult{}
-	}
 
-	return &SearchResults{Files: dedupedFiles, Notes: dedupedNotes}, nil
+	return &SearchResults{Files: dedupedFiles}, nil
 }
 
 func dedupeFileResults(results []SearchFileResult) []SearchFileResult {
@@ -329,27 +241,6 @@ func dedupeFileResults(results []SearchFileResult) []SearchFileResult {
 			}
 		} else {
 			seen[r.FileID] = len(deduped)
-			deduped = append(deduped, r)
-		}
-	}
-	return deduped
-}
-
-func dedupeNoteResults(results []SearchNoteResult) []SearchNoteResult {
-	seen := make(map[int64]int)
-	var deduped []SearchNoteResult
-	for _, r := range results {
-		if idx, ok := seen[r.NoteID]; ok {
-			existing := &deduped[idx]
-			existing.MatchSources = mergeSources(existing.MatchSources, r.MatchSources)
-			if r.Snippet != "" && existing.Snippet == "" {
-				existing.Snippet = r.Snippet
-			}
-			if r.Rank < existing.Rank {
-				existing.Rank = r.Rank
-			}
-		} else {
-			seen[r.NoteID] = len(deduped)
 			deduped = append(deduped, r)
 		}
 	}

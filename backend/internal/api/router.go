@@ -20,7 +20,6 @@ func NewRouter(s *store.Store, sc *scanner.Scanner, ext *extractor.Extractor, ll
 	ch := handler.NewCommentHandler(s)
 	th := handler.NewTagHandler(s)
 	vfh := handler.NewVirtualFolderHandler(s)
-	nh := handler.NewNoteHandler(s)
 	sh := handler.NewSearchHandler(s)
 	ih := handler.NewIntelligenceHandler(s, llmClient, cfg)
 
@@ -46,8 +45,6 @@ func NewRouter(s *store.Store, sc *scanner.Scanner, ext *extractor.Extractor, ll
 	mux.HandleFunc("GET /tags", th.List)
 	mux.HandleFunc("POST /files/{id}/tags", th.AddFileTag)
 	mux.HandleFunc("DELETE /files/{id}/tags/{tagId}", th.RemoveFileTag)
-	mux.HandleFunc("POST /notes/{id}/tags", th.AddNoteTag)
-	mux.HandleFunc("DELETE /notes/{id}/tags/{tagId}", th.RemoveNoteTag)
 
 	mux.HandleFunc("GET /virtual-folders", vfh.List)
 	mux.HandleFunc("POST /virtual-folders", vfh.Create)
@@ -57,13 +54,6 @@ func NewRouter(s *store.Store, sc *scanner.Scanner, ext *extractor.Extractor, ll
 	mux.HandleFunc("POST /virtual-folders/{id}/files", vfh.AddFiles)
 	mux.HandleFunc("DELETE /virtual-folders/{id}/files/{fileId}", vfh.RemoveFile)
 	mux.HandleFunc("POST /virtual-folders/{id}/materialize", vfh.Materialize)
-
-	mux.HandleFunc("GET /notes", nh.List)
-	mux.HandleFunc("POST /notes", nh.Create)
-	mux.HandleFunc("GET /notes/{id}", nh.Get)
-	mux.HandleFunc("PATCH /notes/{id}", nh.Update)
-	mux.HandleFunc("DELETE /notes/{id}", nh.Delete)
-	mux.HandleFunc("POST /notes/{id}/materialize", nh.Materialize)
 
 	mux.HandleFunc("GET /search", sh.Search)
 

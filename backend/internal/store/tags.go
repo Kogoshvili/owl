@@ -28,12 +28,6 @@ type FileTag struct {
 	Source string `json:"source"`
 }
 
-type NoteTag struct {
-	NoteID int64  `json:"note_id"`
-	TagID  int64  `json:"tag_id"`
-	Source string `json:"source"`
-}
-
 func (s *Store) UpdateTagSource(id int64, source string) (*Tag, error) {
 	_, err := s.db.Exec(`UPDATE tags SET source = ? WHERE id = ?`, source, id)
 	if err != nil {
@@ -186,37 +180,6 @@ func (s *Store) ListFileTags(fileID int64) ([]Tag, error) {
 	rows, err := s.db.Query(
 		`SELECT t.id, t.name, t.source, t.description, t.created_at FROM tags t JOIN file_tags ft ON t.id = ft.tag_id WHERE ft.file_id = ? ORDER BY t.name`,
 		fileID,
-	)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	var tags []Tag
-	for rows.Next() {
-		var t Tag
-		if err := rows.Scan(&t.ID, &t.Name, &t.Source, &t.Description, &t.CreatedAt); err != nil {
-			return nil, err
-		}
-		tags = append(tags, t)
-	}
-	return tags, rows.Err()
-}
-
-func (s *Store) AddNoteTag(noteID, tagID int64, source string) error {
-	_, err := s.db.Exec(`INSERT OR IGNORE INTO note_tags (note_id, tag_id, source) VALUES (?, ?, ?)`, noteID, tagID, source)
-	return err
-}
-
-func (s *Store) RemoveNoteTag(noteID, tagID int64) error {
-	_, err := s.db.Exec(`DELETE FROM note_tags WHERE note_id = ? AND tag_id = ?`, noteID, tagID)
-	return err
-}
-
-func (s *Store) ListNoteTags(noteID int64) ([]Tag, error) {
-	rows, err := s.db.Query(
-		`SELECT t.id, t.name, t.source, t.description, t.created_at FROM tags t JOIN note_tags nt ON t.id = nt.tag_id WHERE nt.note_id = ? ORDER BY t.name`,
-		noteID,
 	)
 	if err != nil {
 		return nil, err

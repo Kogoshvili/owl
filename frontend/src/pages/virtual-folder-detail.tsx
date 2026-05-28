@@ -120,7 +120,6 @@ export function VirtualFolderDetailPage({ id }: { id: string }) {
 
   const folder = detailQuery.data
   const files = folder.files ?? []
-  const notes = folder.notes ?? []
   const existingFileIds = new Set(files.map((f) => f.id))
 
   const handleRemoveFile = async (fileId: number) => {
@@ -185,19 +184,6 @@ export function VirtualFolderDetailPage({ id }: { id: string }) {
               ))}
             </tbody>
           </table>
-        )}
-      </div>
-
-      <div class="folder-section">
-        <h3>Notes ({notes.length})</h3>
-        {notes.length === 0 ? (
-          <div class="empty notes-placeholder">Notes coming in v2</div>
-        ) : (
-          <ul class="folder-notes-list">
-            {notes.map((n) => (
-              <li key={n.id}>{n.title}</li>
-            ))}
-          </ul>
         )}
       </div>
 

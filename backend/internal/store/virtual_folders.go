@@ -21,7 +21,6 @@ type VirtualFolder struct {
 type VirtualFolderDetail struct {
 	VirtualFolder
 	Files []File `json:"files"`
-	Notes []Note `json:"notes"`
 }
 
 func (s *Store) ListVirtualFolders(source *string) ([]VirtualFolder, error) {
@@ -178,15 +177,9 @@ func (s *Store) GetVirtualFolderDetail(id int64) (*VirtualFolderDetail, error) {
 		return nil, err
 	}
 
-	notes, err := s.ListFolderNotes(id)
-	if err != nil {
-		return nil, err
-	}
-
 	return &VirtualFolderDetail{
 		VirtualFolder: *folder,
 		Files:         files,
-		Notes:         notes,
 	}, nil
 }
 
