@@ -8,6 +8,7 @@ import {
   deleteDir,
   extractDir,
   extractFile,
+  getUnprocessedCount,
   searchFiles,
   getFileDetail,
   upsertComment,
@@ -24,6 +25,9 @@ import {
   deleteVirtualFolder,
   addFilesToFolder,
   removeFileFromFolder,
+  listPhysicalFolders,
+  getSmartSuggestions,
+  acceptSmartSuggestion,
   tagFile,
   tagFiles,
   tagWatchedDir,
@@ -428,5 +432,51 @@ export function useRefineTag() {
         qc.invalidateQueries({ queryKey: ["tags"] })
       }, 3000)
     },
+  })
+}
+
+export function usePhysicalFolders(watchedDirId: number | null) {
+  return useQuery({
+    queryKey: ["physicalFolders", watchedDirId],
+    queryFn: () => listPhysicalFolders(watchedDirId!),
+    enabled: watchedDirId !== null,
+  })
+}
+
+export function useSmartSuggestions(watchedDirId: number | null) {
+  return useQuery({
+    queryKey: ["smartSuggestions", watchedDirId],
+    queryFn: () => getSmartSuggestions(watchedDirId!),
+    enabled: false,
+  })
+}
+
+export function useGenerateSmartSuggestions() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (watchedDirId: number) => getSmartSuggestions(watchedDirId),
+    onSuccess: (data, watchedDirId) => {
+      qc.setQueryData(["smartSuggestions", watchedDirId], data)
+    },
+  })
+}
+
+export function useAcceptSmartSuggestion() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (suggestion: Parameters<typeof acceptSmartSuggestion>[0]) =>
+      acceptSmartSuggestion(suggestion),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["smartSuggestions"] })
+      qc.invalidateQueries({ queryKey: ["virtualFolders"] })
+    },
+  })
+}
+
+export function useUnprocessedCount(watchedDirId: number | null) {
+  return useQuery({
+    queryKey: ["unprocessedCount", watchedDirId],
+    queryFn: () => getUnprocessedCount(watchedDirId!),
+    enabled: watchedDirId !== null,
   })
 }

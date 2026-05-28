@@ -7,11 +7,8 @@ import (
 type StrategyID string
 
 const (
-	StrategyPathTFIDF    StrategyID = "path_tfidf"
 	StrategyContentTFIDF StrategyID = "content_tfidf"
 	StrategyEmbeddings   StrategyID = "embeddings"
-	StrategyLLMKeywords  StrategyID = "llm_keywords"
-	StrategyHybrid       StrategyID = "hybrid"
 )
 
 type StrategyInfo struct {
@@ -47,6 +44,7 @@ type Strategy interface {
 
 	SuggestTags(ctx context.Context, fileIDs []int64) ([]TagSuggestion, error)
 	SuggestFolders(ctx context.Context, fileIDs []int64) ([]FolderSuggestion, error)
+	SuggestFoldersWithCorpus(ctx context.Context, fileIDs []int64, corpus *Corpus) ([]FolderSuggestion, error)
 }
 
 type Registry struct {
@@ -70,7 +68,13 @@ func (r *Registry) Get(id StrategyID) Strategy {
 }
 
 func (r *Registry) Default() Strategy {
-	return r.strategies[StrategyPathTFIDF]
+	if s := r.strategies[StrategyContentTFIDF]; s != nil {
+		return s
+	}
+	if s := r.strategies[StrategyEmbeddings]; s != nil {
+		return s
+	}
+	return nil
 }
 
 func (r *Registry) List() []StrategyInfo {
@@ -90,10 +94,9 @@ func (r *Registry) List() []StrategyInfo {
 
 func ParseStrategyID(s string) StrategyID {
 	switch StrategyID(s) {
-	case StrategyPathTFIDF, StrategyContentTFIDF, StrategyEmbeddings,
-		StrategyLLMKeywords, StrategyHybrid:
+	case StrategyContentTFIDF, StrategyEmbeddings:
 		return StrategyID(s)
 	default:
-		return StrategyPathTFIDF
+		return StrategyContentTFIDF
 	}
 }

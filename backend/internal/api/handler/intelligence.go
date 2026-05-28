@@ -15,49 +15,103 @@ import (
 )
 
 type IntelligenceHandler struct {
-	store      *store.Store
-	analyzer   *intelligence.Analyzer
-	tagger     *intelligence.Tagger
-	suggester  *intelligence.Suggester
-	llm        *llm.Client
-	registry   *intelligence.Registry
+	store          *store.Store
+	analyzer       *intelligence.Analyzer
+	tagger         *intelligence.Tagger
+	suggester      *intelligence.Suggester
+	llm            *llm.Client
+	registry       *intelligence.Registry
+	folderStrategy intelligence.StrategyID
 }
 
 func NewIntelligenceHandler(s *store.Store, llmClient *llm.Client, cfg *config.Config) *IntelligenceHandler {
 	analyzer := intelligence.NewAnalyzer(s.Db())
 	registry := intelligence.NewRegistry()
 
-	registry.Register(intelligence.NewPathTFIDFStrategy(analyzer, s, llmClient))
 	registry.Register(intelligence.NewContentTFIDFStrategy(analyzer, s, llmClient))
 
-	if llmClient != nil {
-		registry.Register(intelligence.NewLLMKeywordStrategy(analyzer, s, llmClient))
-	}
-
-	if cfg.LLM.EmbedBaseURL != "" {
-		embedClient := embedding.NewClient(cfg.LLM.EmbedBaseURL, cfg.LLM.EmbedModel)
+	if cfg.LLM.EmbedModel != "" || cfg.LLM.FolderStrategy == "embeddings" {
+		embedURL := cfg.LLM.BaseURL
+		embedClient := embedding.NewClient(embedURL, cfg.LLM.EmbedModel)
 		registry.Register(intelligence.NewEmbeddingsStrategy(analyzer, s, llmClient, embedClient))
-
-		if llmClient != nil {
-			registry.Register(intelligence.NewHybridStrategy(analyzer, s, llmClient, embedClient))
-		}
 	}
 
 	tagger := intelligence.NewTagger(analyzer, s, llmClient, registry)
 	suggester := intelligence.NewSuggester(analyzer, s, llmClient, registry)
 
+	folderStrategy := intelligence.ParseStrategyID(cfg.LLM.FolderStrategy)
+
 	return &IntelligenceHandler{
-		store:     s,
-		analyzer:  analyzer,
-		tagger:    tagger,
-		suggester: suggester,
-		llm:       llmClient,
-		registry:  registry,
+		store:          s,
+		analyzer:       analyzer,
+		tagger:         tagger,
+		suggester:      suggester,
+		llm:            llmClient,
+		registry:       registry,
+		folderStrategy: folderStrategy,
 	}
 }
 
 func (h *IntelligenceHandler) ListStrategies(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, h.registry.List())
+}
+
+func (h *IntelligenceHandler) ListPhysicalFolders(w http.ResponseWriter, r *http.Request) {
+	dirIDStr := r.URL.Query().Get("watched_dir_id")
+	if dirIDStr == "" {
+		writeError(w, http.StatusBadRequest, "watched_dir_id is required")
+		return
+	}
+
+	dirID, err := strconv.ParseInt(dirIDStr, 10, 64)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid watched_dir_id")
+		return
+	}
+
+	tree, err := h.store.ListPhysicalFolders(dirID)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	writeJSON(w, http.StatusOK, tree)
+}
+
+func (h *IntelligenceHandler) ListPhysicalFolderFiles(w http.ResponseWriter, r *http.Request) {
+	path := r.URL.Query().Get("path")
+	if path == "" {
+		writeError(w, http.StatusBadRequest, "path is required")
+		return
+	}
+
+	files, err := h.store.GetFilesInDir(path)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{
+		"path":  path,
+		"files": files,
+		"count": len(files),
+	})
+}
+
+func (h *IntelligenceHandler) AnalyzeFolderCoherence(w http.ResponseWriter, r *http.Request) {
+	path := r.URL.Query().Get("path")
+	if path == "" {
+		writeError(w, http.StatusBadRequest, "path is required")
+		return
+	}
+
+	result, err := intelligence.AnalyzeFolderCoherence(h.analyzer, h.store, path)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	writeJSON(w, http.StatusOK, result)
 }
 
 func (h *IntelligenceHandler) TagFile(w http.ResponseWriter, r *http.Request) {
@@ -510,6 +564,102 @@ func (h *IntelligenceHandler) RefineFolder(w http.ResponseWriter, r *http.Reques
 	writeJSON(w, http.StatusAccepted, map[string]any{"status": "refining", "id": id})
 }
 
+func (h *IntelligenceHandler) SmartSuggestFolders(w http.ResponseWriter, r *http.Request) {
+	dirIDStr := r.URL.Query().Get("watched_dir_id")
+	if dirIDStr == "" {
+		writeError(w, http.StatusBadRequest, "watched_dir_id is required")
+		return
+	}
+
+	dirID, err := strconv.ParseInt(dirIDStr, 10, 64)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid watched_dir_id")
+		return
+	}
+
+	slog.Info("smart-suggest: starting generation", "watched_dir_id", dirID)
+	start := time.Now()
+
+	suggestions, err := h.generateSmartSuggestions(r.Context(), dirID)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	slog.Info("smart-suggest: generation complete", "suggestions", len(suggestions), "elapsed", time.Since(start).String())
+
+	writeJSON(w, http.StatusOK, map[string]any{
+		"suggestions": suggestions,
+		"count":       len(suggestions),
+	})
+}
+
+func (h *IntelligenceHandler) AcceptSmartSuggestion(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Type        string   `json:"type"`
+		FileIDs     []int64  `json:"file_ids"`
+		Name        string   `json:"name"`
+		TargetID    int64    `json:"target_id"`
+		SourcePaths []string `json:"source_paths"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+
+	switch req.Type {
+	case "new_folder":
+		desc := "Auto-generated virtual folder"
+		folder, err := h.store.CreateVirtualFolder(req.Name, desc, true)
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+		if err := h.store.AddFilesToFolder(folder.ID, req.FileIDs, "auto"); err != nil {
+			writeError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+		writeJSON(w, http.StatusOK, folder)
+
+	case "add_to_folder":
+		if req.TargetID > 0 {
+			if err := h.store.AddFilesToFolder(req.TargetID, req.FileIDs, "auto"); err != nil {
+				writeError(w, http.StatusInternalServerError, err.Error())
+				return
+			}
+			writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+		} else {
+			desc := "Auto-generated virtual folder from existing files"
+			folder, err := h.store.CreateVirtualFolder(req.Name, desc, true)
+			if err != nil {
+				writeError(w, http.StatusInternalServerError, err.Error())
+				return
+			}
+			if err := h.store.AddFilesToFolder(folder.ID, req.FileIDs, "auto"); err != nil {
+				writeError(w, http.StatusInternalServerError, err.Error())
+				return
+			}
+			writeJSON(w, http.StatusOK, folder)
+		}
+
+	case "merge_folders":
+		desc := "Merged virtual folder"
+		folder, err := h.store.CreateVirtualFolder(req.Name, desc, true)
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+		if err := h.store.AddFilesToFolder(folder.ID, req.FileIDs, "auto"); err != nil {
+			writeError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+		writeJSON(w, http.StatusOK, folder)
+
+	default:
+		writeError(w, http.StatusBadRequest, "unknown suggestion type")
+	}
+}
+
 func (h *IntelligenceHandler) RefineTag(w http.ResponseWriter, r *http.Request) {
 	id, ok := parsePathID(w, r, "id")
 	if !ok {
@@ -593,4 +743,30 @@ func (h *IntelligenceHandler) RefineTag(w http.ResponseWriter, r *http.Request) 
 	}()
 
 	writeJSON(w, http.StatusAccepted, map[string]any{"status": "refining", "id": id})
+}
+
+func (h *IntelligenceHandler) GetUnprocessedCount(w http.ResponseWriter, r *http.Request) {
+	dirIDStr := r.URL.Query().Get("watched_dir_id")
+	if dirIDStr == "" {
+		writeError(w, http.StatusBadRequest, "watched_dir_id is required")
+		return
+	}
+
+	dirID, err := strconv.ParseInt(dirIDStr, 10, 64)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid watched_dir_id")
+		return
+	}
+
+	var count int
+	err = h.store.Db().QueryRow(`
+		SELECT COUNT(*) FROM files 
+		WHERE watched_dir_id = ? AND status = 'active' AND processing_status = 'unprocessed'
+	`, dirID).Scan(&count)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{"count": count})
 }

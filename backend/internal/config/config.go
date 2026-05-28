@@ -10,8 +10,8 @@ type LLMConfig struct {
 	Enabled       bool   `json:"enabled"`
 	BaseURL       string `json:"base_url"`
 	Model         string `json:"model"`
-	EmbedBaseURL  string `json:"embed_base_url"`
 	EmbedModel    string `json:"embed_model"`
+	FolderStrategy string `json:"folder_strategy"`
 }
 
 type Config struct {
@@ -21,11 +21,11 @@ type Config struct {
 func Load(configPath string) (*Config, error) {
 	cfg := &Config{
 		LLM: LLMConfig{
-			Enabled:      false,
-			BaseURL:      "http://localhost:1234/v1",
-			Model:        "",
-			EmbedBaseURL: "http://localhost:1234/v1",
-			EmbedModel:   "",
+			Enabled:        false,
+			BaseURL:        "http://localhost:1234/v1",
+			Model:          "",
+			EmbedModel:     "",
+			FolderStrategy: "content_tfidf",
 		},
 	}
 
@@ -47,11 +47,11 @@ func Load(configPath string) (*Config, error) {
 	if model := os.Getenv("LLM_MODEL"); model != "" {
 		cfg.LLM.Model = model
 	}
-	if url := os.Getenv("EMBED_BASE_URL"); url != "" {
-		cfg.LLM.EmbedBaseURL = url
-	}
 	if model := os.Getenv("EMBED_MODEL"); model != "" {
 		cfg.LLM.EmbedModel = model
+	}
+	if strategy := os.Getenv("FOLDER_STRATEGY"); strategy != "" {
+		cfg.LLM.FolderStrategy = strategy
 	}
 
 	return cfg, nil

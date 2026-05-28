@@ -86,6 +86,10 @@ func (s *EmbeddingsStrategy) SuggestTags(ctx context.Context, fileIDs []int64) (
 }
 
 func (s *EmbeddingsStrategy) SuggestFolders(ctx context.Context, fileIDs []int64) ([]FolderSuggestion, error) {
+	return s.SuggestFoldersWithCorpus(ctx, fileIDs, nil)
+}
+
+func (s *EmbeddingsStrategy) SuggestFoldersWithCorpus(ctx context.Context, fileIDs []int64, corpus *Corpus) ([]FolderSuggestion, error) {
 	slog.Info("strategy[embeddings]: suggesting folders", "files", len(fileIDs))
 
 	embeddings, err := s.computeEmbeddings(ctx, fileIDs)

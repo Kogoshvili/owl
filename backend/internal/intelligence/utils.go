@@ -1,6 +1,9 @@
 package intelligence
 
-import "sort"
+import (
+	"sort"
+	"strings"
+)
 
 func clusterFiles(fileIDs []int64, similarityMatrix map[[2]int64]float64, minSim float64, minFiles int) [][]int64 {
 	clusters := [][]int64{}
@@ -108,4 +111,9 @@ func topTerms(keywords map[int64][]Keyword, fileIDs []int64, n int) []string {
 		}
 	}
 	return result
+}
+
+func getExtensionTag(ext string) string {
+	ext = strings.ToLower(strings.TrimPrefix(ext, "."))
+	return extensionTags[ext]
 }

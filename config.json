@@ -3,7 +3,7 @@
     "enabled": true,
     "base_url": "http://localhost:1234/v1",
     "model": "deepseek-r1-distill-qwen-1.5b",
-    "embed_base_url": "http://localhost:1234/v1",
-    "embed_model": ""
+    "embed_model": "jina-embeddings-v5-text-small-retrieval",
+    "folder_strategy": "content_tfidf"
   }
 }

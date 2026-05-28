@@ -71,6 +71,11 @@ func NewRouter(s *store.Store, sc *scanner.Scanner, ext *extractor.Extractor, ll
 	mux.HandleFunc("POST /intelligence/files/tag", ih.TagFiles)
 	mux.HandleFunc("POST /intelligence/watched-directories/{id}/tag", ih.TagWatchedDir)
 	mux.HandleFunc("GET /intelligence/strategies", ih.ListStrategies)
+	mux.HandleFunc("GET /intelligence/folders/physical", ih.ListPhysicalFolders)
+	mux.HandleFunc("GET /intelligence/folders/physical/files", ih.ListPhysicalFolderFiles)
+	mux.HandleFunc("GET /intelligence/folders/physical/coherence", ih.AnalyzeFolderCoherence)
+	mux.HandleFunc("GET /intelligence/folders/smart-suggest", ih.SmartSuggestFolders)
+	mux.HandleFunc("POST /intelligence/folders/smart-suggest/accept", ih.AcceptSmartSuggestion)
 	mux.HandleFunc("GET /intelligence/folders/suggestions", ih.ListFolderSuggestions)
 	mux.HandleFunc("POST /intelligence/folders/suggestions", ih.GenerateSuggestions)
 	mux.HandleFunc("POST /intelligence/folders/suggestions/{id}/accept", ih.AcceptFolderSuggestion)
@@ -82,6 +87,7 @@ func NewRouter(s *store.Store, sc *scanner.Scanner, ext *extractor.Extractor, ll
 	mux.HandleFunc("POST /intelligence/tags/{id}/accept", ih.AcceptTag)
 	mux.HandleFunc("POST /intelligence/refine/folder/{id}", ih.RefineFolder)
 	mux.HandleFunc("POST /intelligence/refine/tag/{id}", ih.RefineTag)
+	mux.HandleFunc("GET /intelligence/files/unprocessed/count", ih.GetUnprocessedCount)
 
 	return middleware.Logging(middleware.CORS(mux))
 }

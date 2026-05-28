@@ -314,8 +314,67 @@ export interface StrategyInfo {
   speed_hint: string
 }
 
+export interface PhysicalFolder {
+  path: string
+  name: string
+  depth: number
+  file_count: number
+  children?: PhysicalFolder[]
+}
+
+export interface OutlierFile {
+  id: number
+  name: string
+  avg_similarity_to_others: number
+}
+
+export interface FolderCoherence {
+  path: string
+  file_count: number
+  avg_similarity: number
+  is_coherent: boolean
+  outlier_files: OutlierFile[]
+}
+
+export interface SmartSuggestion {
+  type: "new_folder" | "add_to_folder" | "merge_folders"
+  file_ids: number[]
+  target_path?: string
+  target_id?: number
+  source_paths?: string[]
+  name?: string
+  description?: string
+  confidence: number
+  file_count: number
+  preview?: string[]
+}
+
 export function listStrategies(): Promise<StrategyInfo[]> {
   return request<StrategyInfo[]>("/intelligence/strategies")
+}
+
+export function listPhysicalFolders(watchedDirId: number): Promise<PhysicalFolder[]> {
+  return request<PhysicalFolder[]>(`/intelligence/folders/physical?watched_dir_id=${watchedDirId}`)
+}
+
+export function listPhysicalFolderFiles(path: string): Promise<{path: string, files: File[], count: number}> {
+  return request<{path: string, files: File[], count: number}>(`/intelligence/folders/physical/files?path=${encodeURIComponent(path)}`)
+}
+
+export function analyzeFolderCoherence(path: string): Promise<FolderCoherence> {
+  return request<FolderCoherence>(`/intelligence/folders/physical/coherence?path=${encodeURIComponent(path)}`)
+}
+
+export function getSmartSuggestions(watchedDirId: number): Promise<{suggestions: SmartSuggestion[], count: number}> {
+  return request<{suggestions: SmartSuggestion[], count: number}>(`/intelligence/folders/smart-suggest?watched_dir_id=${watchedDirId}`)
+}
+
+export function acceptSmartSuggestion(suggestion: {type: string, file_ids: number[], name?: string, target_id?: number, source_paths?: string[]}): Promise<any> {
+  return request<any>(`/intelligence/folders/smart-suggest/accept`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(suggestion),
+  })
 }
 
 export function tagFile(id: number): Promise<{tags: Tag[]}> {
@@ -420,4 +479,8 @@ export function refineTag(id: number): Promise<{meaningful: boolean, action: str
   return request<{meaningful: boolean, action: string, tag?: Tag}>(`/intelligence/refine/tag/${id}`, {
     method: "POST",
   })
+}
+
+export function getUnprocessedCount(watchedDirId: number): Promise<{count: number}> {
+  return request<{count: number}>(`/intelligence/files/unprocessed/count?watched_dir_id=${watchedDirId}`)
 }

@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"log/slog"
 	"math"
+	"path/filepath"
 	"regexp"
 	"strings"
 	"unicode"
@@ -17,6 +18,11 @@ type Keyword struct {
 type FileKeywords struct {
 	FileID   int64
 	Keywords []Keyword
+}
+
+type Corpus struct {
+	Keywords   map[int64][]Keyword
+	KeywordMap map[int64]map[string]float64
 }
 
 var stopwords = map[string]bool{
@@ -143,6 +149,85 @@ func (a *Analyzer) GetFileKeywords(fileID int64, topN int) ([]Keyword, error) {
 	return ExtractKeywordsFromContent(content.String, topN), nil
 }
 
+func (a *Analyzer) GetFileKeywordsWithFallback(fileID int64, topN int) ([]Keyword, error) {
+	// Try content first
+	var content sql.NullString
+	err := a.db.QueryRow(`SELECT content FROM files_fts WHERE file_id = ?`, fileID).Scan(&content)
+	if err == nil && content.Valid && content.String != "" {
+		return ExtractKeywordsFromContent(content.String, topN), nil
+	}
+
+	// Fallback: get filename
+	var name string
+	err = a.db.QueryRow(`SELECT name FROM files WHERE id = ?`, fileID).Scan(&name)
+	if err != nil {
+		return []Keyword{}, nil
+	}
+
+	// Extract keywords from filename (without extension)
+	baseName := strings.TrimSuffix(name, filepath.Ext(name))
+	tokens := Tokenize(baseName)
+
+	// Normalize and filter
+	termFreq := make(map[string]int)
+	for _, token := range tokens {
+		term := NormalizeTerm(token)
+		if len(term) < 3 {
+			continue
+		}
+		if IsStopword(term) {
+			continue
+		}
+		if IsNumeric(term) {
+			continue
+		}
+		termFreq[term]++
+	}
+
+	// Build keywords from filename
+	keywords := make([]Keyword, 0, len(termFreq))
+	for term, freq := range termFreq {
+		keywords = append(keywords, Keyword{
+			Term:  term,
+			Score: float64(freq),
+		})
+	}
+
+	// Add extension tag with higher weight
+	var ext string
+	a.db.QueryRow(`SELECT extension FROM files WHERE id = ?`, fileID).Scan(&ext)
+	extTag := getExtensionTag(ext)
+	if extTag != "" {
+		keywords = append(keywords, Keyword{
+			Term:  extTag,
+			Score: 5.0,
+		})
+	}
+
+	return topKeywords(keywords, topN), nil
+}
+
+func (a *Analyzer) BuildCorpus(fileIDs []int64) (*Corpus, error) {
+	corpusKeywords, err := a.BuildCorpusTFIDFWithFallback(fileIDs)
+	if err != nil {
+		return nil, err
+	}
+
+	keywordMap := make(map[int64]map[string]float64)
+	for _, id := range fileIDs {
+		kwMap := make(map[string]float64)
+		for _, kw := range corpusKeywords[id] {
+			kwMap[kw.Term] = kw.Score
+		}
+		keywordMap[id] = kwMap
+	}
+
+	return &Corpus{
+		Keywords:   corpusKeywords,
+		KeywordMap: keywordMap,
+	}, nil
+}
+
 func (a *Analyzer) BuildCorpusTFIDF(fileIDs []int64) (map[int64][]Keyword, error) {
 	result := make(map[int64][]Keyword)
 	termDocFreq := make(map[string]int)
@@ -165,6 +250,56 @@ func (a *Analyzer) BuildCorpusTFIDF(fileIDs []int64) (map[int64][]Keyword, error
 
 		if (i+1)%50 == 0 || i == len(fileIDs)-1 {
 			slog.Info("build-corpus: progress", "files", i+1, "total", len(fileIDs), "unique_terms_so_far", len(termDocFreq))
+		}
+	}
+
+	totalDocs := len(fileIDs)
+
+	for _, fileID := range fileIDs {
+		keywordMap := fileKeywordsMap[fileID]
+		keywords := make([]Keyword, 0, len(keywordMap))
+
+		for term, freq := range keywordMap {
+			docFreq := termDocFreq[term]
+			idf := math.Log(float64(totalDocs) / float64(docFreq))
+			tfidf := float64(freq) * idf
+
+			keywords = append(keywords, Keyword{
+				Term:  term,
+				Score: tfidf,
+			})
+		}
+
+		result[fileID] = topKeywords(keywords, 20)
+	}
+
+	slog.Info("build-corpus: complete", "files", totalDocs, "unique_terms", len(termDocFreq))
+
+	return result, nil
+}
+
+func (a *Analyzer) BuildCorpusTFIDFWithFallback(fileIDs []int64) (map[int64][]Keyword, error) {
+	result := make(map[int64][]Keyword)
+	termDocFreq := make(map[string]int)
+	fileKeywordsMap := make(map[int64]map[string]int)
+
+	slog.Info("build-corpus-with-fallback: starting", "files", len(fileIDs))
+	for i, fileID := range fileIDs {
+		keywords, err := a.GetFileKeywordsWithFallback(fileID, 100)
+		if err != nil {
+			return nil, err
+		}
+
+		keywordMap := make(map[string]int)
+		for _, kw := range keywords {
+			keywordMap[kw.Term] = int(kw.Score)
+			termDocFreq[kw.Term]++
+		}
+
+		fileKeywordsMap[fileID] = keywordMap
+
+		if (i+1)%100 == 0 || i == len(fileIDs)-1 {
+			slog.Info("build-corpus-with-fallback: progress", "files", i+1, "total", len(fileIDs), "unique_terms_so_far", len(termDocFreq))
 		}
 	}
 

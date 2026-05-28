@@ -1,145 +1,94 @@
-# Owl File Manager - Progress
+# Owl File Manager — Plan
 
-## Completed
+## Current Status: v1.1 (Folders Overhaul)
 
-### Core
-- [x] Go backend scaffold (HTTP server on :3721)
-- [x] SQLite database with FTS5, migrations via golang-migrate (001–007)
-- [x] Store layer - CRUD + search + processing + intelligence queries
-- [x] 24+ API endpoints with handlers
-- [x] CORS + request logging middleware
-- [x] Frontend scaffold (Preact + Vite + TypeScript)
-- [x] Tauri v2 shell configured
+### What's Done
+- Go backend with SQLite FTS5, HTTP API on :3721
+- Preact + Vite + TypeScript frontend, Tauri v2 shell
+- Scanner, content extractor (txt/md/pdf/docx/xlsx/pptx + more), metadata extractor
+- Unified search across 5 scopes (filenames, content, comments, tags, notes)
+- File detail page with metadata, viewers, comments, tags
+- Virtual folders: create/edit/delete, accept/dismiss auto-suggestions, materialize
+- Tags: auto-tag, accept/dismiss, LLM refinement for names/descriptions
+- Intelligence module with strategy interface: content_tfidf and embeddings
+- Embedding client (LM Studio / OpenAI-compatible), DBSCAN clustering
+- LLM integration via LM Studio for tag/folder refinement
+- Structured logging with slog + tint
 
-### Scanner & Extraction
-- [x] Directory scanner (hidden file skipping, watched_dir_id, cascade delete)
-- [x] Async scan via goroutine
-- [x] Content extractor (text, PDF, DOCX, XLSX, PPTX + many more formats)
-- [x] Metadata extractor (text stats, image dimensions, SVG, PDF pages, Office doc props)
-- [x] Change detection — compares modified_at to skip unchanged files (in UpsertFile)
-- [x] Processing status tracking (unprocessed/queued/processing/processed/stale/failed)
-- [x] Recovery of stuck files on startup
-- [x] Raw file serving (images, text preview)
+### Tags — Deferred to v1.2
+Tags need a separate redesign. Known issues:
+- Too many generic tags produced (extension-based, path segments)
+- Tags don't consider existing folder structure
+- Need smarter content-aware tagging that respects physical folder boundaries
+- Tag strategy should be configurable separately from folder strategy
 
-### Search & Files
-- [x] Unified search across 5 scopes (filenames, content, comments, tags, notes) with scope toggle pills
-- [x] File detail page (metadata, viewer, extracted content, comments, tags with source badges + Auto-Tag button)
-- [x] File filtering and sorting (extension, processing status; sort by name/ext/size/indexed_at)
-- [x] Pagination for file lists (50 per page, server-side)
-- [x] Clickable file names in file list and search results
-- [x] Failed status tooltip in file list
-- [x] Error banner on file detail page
-- [x] SQLite WAL mode + busy_timeout + single connection (fixes SQLITE_BUSY)
+### Current Focus: Smart Folders
+The core problem: the system treats all files equally and clusters blindly, ignoring that many files already live in meaningful subfolders. We need to:
+1. Show real filesystem folders in the UI (tree view)
+2. Analyze subfolder coherence (are files in a subfolder related?)
+3. Focus suggestions on orphan files and incoherent subfolders
+4. Suggest adding files to existing folders, not just creating new ones
+5. Keep only 2 strategies: content_tfidf (fast) and embeddings (better)
 
-### Virtual Folders
-- [x] Create/list/delete/edit folders
-- [x] Add/remove files to/from folders (multi-select file picker dialog)
-- [x] View folder contents (detail page with files + notes placeholder)
-- [x] Two-column layout: manual folders left, auto folder suggestions right
-- [x] Accept/dismiss auto folder suggestions (accept → source='manual', dismiss → delete)
-- [x] Source filtering: `GET /virtual-folders?source=manual|auto`
+---
 
-### Tags
-- [x] Tag CRUD with source tracking ('auto'|'manual')
-- [x] Two-column layout: manual tags left, auto tags sidebar right
-- [x] Auto tag cards clickable → tag detail preview before accepting
-- [x] Tag detail page with Accept/Dismiss buttons for auto tags
-- [x] Auto-Tag All / Accept All / Dismiss All bulk actions in sidebar
-- [x] `source` column replaces removed `auto_generated` column (migration 007)
+## Implementation Phases
 
-### Intelligence
-- [x] Analyzer: TF-IDF corpus builder with progress logging
-- [x] Auto-tagger: single-file (threshold check) + bulk (two-pass with minTagFileCount=3)
-- [x] Folder suggester: keyword clustering with MinFilesForFolder=3, phase-by-phase progress
-- [x] 11 intelligence API endpoints
-- [x] Frontend: TagsPage, TagDetailPage, FolderSuggestions sidebar, TagSuggestions sidebar
+### Phase 1: Physical Folder Discovery
+- Store: `ListPhysicalFolders(watchedDirID)` → builds tree from `parent_dir` values
+- API: `GET /intelligence/folders/physical?watched_dir_id=` → returns folder tree
+- API: `GET /intelligence/folders/physical/{path}/files` → files in a folder
+- Frontend: tree view component for browsing physical folders
 
-### Logging
-- [x] Structured logging: `slog` + `tint` handler (colored console output, auto TTY detection)
-- [x] `ProgressLogger` for iteration tracking (scanner every 500, extractor every 100, etc.)
-- [x] `LOG_LEVEL` env var (default: info)
-- [x] OTEL stub for future integration
-- [x] All `log.Printf` replaced with `slog.*`
+### Phase 2: Subfolder Coherence Analysis
+- `AnalyzeFolderCoherence(path)` → avg TF-IDF similarity, outlier detection
+- API: `GET /intelligence/folders/physical/{path}/coherence`
+- Frontend: coherence indicator per folder (green/yellow/red)
 
-### Navigation
-- [x] Ingest page (watched dirs + file list — was "Dashboard")
-- [x] Files (standalone list)
-- [x] Search
-- [x] Tags
-- [x] Folders
+### Phase 3: Smart Suggestion Engine
+- Classify folders: coherent (leave alone) vs incoherent (needs help)
+- Collect orphans: files in root, outliers from incoherent folders
+- Generate typed suggestions:
+  - `new_folder` — cluster of orphans → new virtual folder
+  - `add_to_folder` — orphans related to existing folder
+  - `merge_folders` — adjacent similar subfolders
+- API: `POST /intelligence/folders/smart-suggest`
 
-## v2 - Future
+### Phase 4: Config & Strategy Simplification
+- Remove: path_tfidf, keyword_llm, hybrid strategies
+- Keep: content_tfidf (default, fast), embeddings (better, needs LM Studio embedding model)
+- Config: `folder_strategy` field in config.json
+- Remove strategy dropdown from UI
 
-### Dashboard
-- [ ] Proper dashboard page (stats, recent activity, quick actions)
+### Phase 5: Frontend Overhaul
+- Folders page: tree view of physical folders + virtual folders below
+- Suggestions sidebar: typed suggestions (new_folder, add_to_folder, merge_folders)
+- Remove strategy selectors
+- Coherence indicators on physical folders
 
-### Automation
-- [ ] Batch operations - select multiple files, bulk tag/extract/delete
-- [ ] Auto-scan on startup
-- [ ] Directory watching (fsnotify) for real-time file changes
-- [ ] Background pipeline coordination — scan → extract → tag → suggest
+---
 
-### Intelligence
-- [ ] User feedback loop — confirm/dismiss suggestions, learn from feedback
-- [ ] Min file count thresholds configurable via settings (currently hardcoded: tags=3, folders=3)
+## Key Files
 
-### Notes & Materialization
-- [ ] Notes frontend (backend done)
-  - Create/edit/delete notes
-  - Attach notes to virtual folders
-  - Tag notes
-- [ ] Materialization — create folder on disk + move/copy files (backend stub exists)
-- [ ] Note materialization — write .md files to disk (backend stub exists)
+### Backend
+- `cmd/owl/main.go` — entry point, server setup
+- `internal/config/config.go` — config loading (JSON + env vars)
+- `internal/db/migrations/` — schema migrations (001-009)
+- `internal/store/` — data access layer (files, tags, virtual_folders, etc.)
+- `internal/intelligence/` — strategy interface, content_tfidf, embeddings, coherence
+- `internal/embedding/` — LM Studio embedding client (OpenAI-compatible)
+- `internal/llm/` — LLM client for refinement
+- `internal/api/handler/` — HTTP handlers
+- `internal/api/router.go` — route definitions
 
-### Media & Desktop
-- [ ] Image metadata extraction outside extraction pipeline
-- [ ] EXIF data extraction for JPEG
-- [ ] Audio/video metadata extraction
-- [ ] Thumbnail generation for images
-- [ ] OCR + AI vision for image content understanding
-- [ ] Tauri desktop integration - system tray, native file dialogs
-- [ ] Projects feature
+### Frontend
+- `src/api.ts` — API client functions
+- `src/hooks/queries.ts` — TanStack Query hooks
+- `src/components/` — UI components
+- `src/pages/` — page-level components
+- `src/app.css` — all styles
 
-## Architecture
-
-```
-backend/
-  cmd/owl/main.go          - entry point
-  internal/
-    db/                     - SQLite init + migrations
-    store/                  - data access layer
-    api/
-      handler/              - HTTP handlers
-      middleware/            - CORS, logging
-      router.go             - route registration
-    scanner/                - directory walker
-    extractor/              - content + metadata extraction
-    intelligence/           - TF-IDF analyzer, auto-tagger, folder suggester
-    logging/                - slog+tint init, progress logger, OTEL stub
-
-frontend/
-  src/
-    api.ts                  - API types + fetch wrappers
-    hooks/queries.ts        - TanStack Query hooks
-    pages/                  - route page components
-    components/             - shared components
-    app.tsx                 - router + layout
-    app.css                 - all styles
-```
-
-## Key Decisions
-- SQLite with WAL mode, single connection, 5s busy timeout
-- Processing status tracks extraction pipeline
-- File metadata stored as JSON blob in file_metadata column
-- Extractor: 50MB file limit, 500KB text limit, processes in size order
-- Comments are 1:1 per file
-- `source` column ('auto'|'manual') on tags and virtual_folders — no separate dismissed tracking
-- Dismissal = delete for both tags and folders
-- Auto-tagging: single-file uses threshold check (≥minTagFileCount-1 other files), bulk uses two-pass (collect → filter → write)
-- Folder suggestions: keyword clustering with min files threshold, created as source='auto'
-- `ListTagsWithCount(source *string)` and `ListVirtualFolders(source *string)` — optional source filtering
-- Scanner skips hidden files/dirs, does NOT filter by extension
-- Scans run async via goroutine
-- Logging: `log/slog` with `tint` handler; OTEL stub for future
-- `LOG_LEVEL` env var controls log level (default: info)
-- Min file count thresholds: tags ≥3, folders ≥3 (hardcoded, TODO: settings)
+### Config
+- `config.json` (repo root, gitignored) — local development config
+- `~/.config/owl/config.json` — production config path
+- Env vars: `LLM_ENABLED`, `LLM_BASE_URL`, `LLM_MODEL`, `EMBED_MODEL`

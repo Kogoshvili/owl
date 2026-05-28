@@ -34,7 +34,7 @@ func (s *ContentTFIDFStrategy) SpeedHint() string     { return "~30s for 12K fil
 func (s *ContentTFIDFStrategy) SuggestTags(ctx context.Context, fileIDs []int64) ([]TagSuggestion, error) {
 	slog.Info("strategy[content_tfidf]: suggesting tags", "files", len(fileIDs))
 
-	corpusKeywords, err := s.analyzer.BuildCorpusTFIDF(fileIDs)
+	corpusKeywords, err := s.analyzer.BuildCorpusTFIDFWithFallback(fileIDs)
 	if err != nil {
 		return nil, err
 	}
@@ -95,6 +95,10 @@ func (s *ContentTFIDFStrategy) SuggestTags(ctx context.Context, fileIDs []int64)
 }
 
 func (s *ContentTFIDFStrategy) SuggestFolders(ctx context.Context, fileIDs []int64) ([]FolderSuggestion, error) {
+	return s.SuggestFoldersWithCorpus(ctx, fileIDs, nil)
+}
+
+func (s *ContentTFIDFStrategy) SuggestFoldersWithCorpus(ctx context.Context, fileIDs []int64, corpus *Corpus) ([]FolderSuggestion, error) {
 	minFiles := MinFilesForFolder
 	minSimilarity := 0.45
 
@@ -104,21 +108,37 @@ func (s *ContentTFIDFStrategy) SuggestFolders(ctx context.Context, fileIDs []int
 		return []FolderSuggestion{}, nil
 	}
 
-	corpusKeywords, err := s.analyzer.BuildCorpusTFIDF(fileIDs)
+	slog.Info("strategy[content_tfidf]: building corpus", "files", len(fileIDs))
+	start := time.Now()
+	corpusKeywords, err := s.analyzer.BuildCorpusTFIDFWithFallback(fileIDs)
 	if err != nil {
 		return nil, err
 	}
+	slog.Info("strategy[content_tfidf]: corpus built", "elapsed", time.Since(start).String())
 
 	fileKeywords := make(map[int64]map[string]float64)
-	for _, fileID := range fileIDs {
-		kwMap := make(map[string]float64)
-		for _, kw := range corpusKeywords[fileID] {
-			kwMap[kw.Term] = kw.Score
+	if corpus != nil {
+		// Use pre-built corpus
+		for _, id := range fileIDs {
+			if km, ok := corpus.KeywordMap[id]; ok {
+				fileKeywords[id] = km
+			}
 		}
-		fileKeywords[fileID] = kwMap
+		slog.Info("strategy[content_tfidf]: using pre-built corpus", "files", len(fileIDs))
+	} else {
+		// Build corpus from scratch (legacy path)
+		slog.Info("strategy[content_tfidf]: building corpus from scratch", "files", len(fileIDs))
+		for _, id := range fileIDs {
+			kwMap := make(map[string]float64)
+			for _, kw := range corpusKeywords[id] {
+				kwMap[kw.Term] = kw.Score
+			}
+			fileKeywords[id] = kwMap
+		}
 	}
 
-	start := time.Now()
+	slog.Info("strategy[content_tfidf]: computing similarity matrix", "files", len(fileIDs))
+	start = time.Now()
 	similarityMatrix := make(map[[2]int64]float64)
 	for i, id1 := range fileIDs {
 		for _, id2 := range fileIDs[i+1:] {
@@ -133,8 +153,12 @@ func (s *ContentTFIDFStrategy) SuggestFolders(ctx context.Context, fileIDs []int
 	}
 	slog.Info("strategy[content_tfidf]: similarity complete", "elapsed", time.Since(start).String(), "similar_pairs", len(similarityMatrix))
 
+	slog.Info("strategy[content_tfidf]: clustering", "files", len(fileIDs))
+	start = time.Now()
 	clusters := clusterFiles(fileIDs, similarityMatrix, minSimilarity, minFiles)
+	slog.Info("strategy[content_tfidf]: clustering complete", "clusters", len(clusters), "elapsed", time.Since(start).String())
 
+	slog.Info("strategy[content_tfidf]: refining and generating suggestions", "clusters", len(clusters))
 	llmAvailable := s.llm != nil && s.llm.IsAvailable(ctx)
 	if llmAvailable {
 		subClustered := [][]int64{}
@@ -211,9 +235,11 @@ func (s *ContentTFIDFStrategy) SuggestFolders(ctx context.Context, fileIDs []int
 			Description: description,
 			FileIDs:     cluster,
 			Score:       score,
-			Preview:     preview,
-		})
-	}
+		Preview:     preview,
+	})
+}
+
+	slog.Info("strategy[content_tfidf]: folder suggestions complete", "suggestions", len(suggestions))
 
 	sort.Slice(suggestions, func(i, j int) bool {
 		if suggestions[i].Score != suggestions[j].Score {
