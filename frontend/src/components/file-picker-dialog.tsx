@@ -1,6 +1,6 @@
 import { useState } from "preact/hooks"
 import { useAllFiles, useFileExtensions } from "../hooks/queries"
-import type { FilterState } from "./file-list"
+import type { FileListFilterState } from "../api"
 
 interface Props {
   existingFileIds: Set<number>
@@ -18,7 +18,7 @@ function formatBytes(bytes: number): string {
 }
 
 export function FilePickerDialog({ existingFileIds, onAdd, onClose, adding }: Props) {
-  const [filters, setFilters] = useState<FilterState>({ sort: "name", order: "asc", page: 1, limit: 50 })
+  const [filters, setFilters] = useState<FileListFilterState>({ sort: "name", order: "asc", page: 1, limit: 50 })
   const [selected, setSelected] = useState<Set<number>>(new Set())
   const [searchName, setSearchName] = useState("")
   const filesQuery = useAllFiles(filters)

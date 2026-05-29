@@ -102,6 +102,16 @@ export interface FileListParams {
   offset?: number
 }
 
+export interface FileListFilterState {
+  extension?: string
+  processing_status?: string
+  supported?: string
+  sort: string
+  order: string
+  page: number
+  limit: number
+}
+
 export interface FileListResponse {
   files: File[]
   total: number

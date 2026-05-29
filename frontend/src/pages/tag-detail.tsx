@@ -1,8 +1,7 @@
 import { useState } from "preact/hooks"
 import { useTags, useTagFilesList, useAcceptTag, useDeleteTag, useRefineTag } from "../hooks/queries"
 import { route } from "preact-router"
-import type { FilterState } from "../components/file-list"
-import type { File } from "../api"
+import type { FileListFilterState, File } from "../api"
 
 function formatBytes(bytes: number): string {
   if (bytes === 0) return "0 B"
@@ -17,7 +16,7 @@ export function TagDetailPage({ id }: { id?: string }) {
   const tagsQuery = useTags()
   const tag = tagsQuery.data?.find((t) => t.id === tagId)
 
-  const [filters, setFilters] = useState<FilterState>({
+  const [filters, setFilters] = useState<FileListFilterState>({
     sort: "name",
     order: "asc",
     page: 1,
