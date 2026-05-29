@@ -19,7 +19,7 @@ type SearchResults struct {
 	Files []SearchFileResult `json:"files"`
 }
 
-var allScopes = []string{"filenames", "content", "comments", "tags"}
+var allScopes = []string{"filenames", "content", "comments"}
 
 func parseScopes(scopes string) map[string]bool {
 	if scopes == "" {
@@ -145,39 +145,6 @@ func (s *Store) searchComments(query string, limit int) ([]SearchFileResult, err
 	return results, rows.Err()
 }
 
-func (s *Store) searchFilesByTag(query string, limit int) ([]SearchFileResult, error) {
-	if limit <= 0 {
-		limit = 20
-	}
-	pattern := "%" + query + "%"
-	rows, err := s.db.Query(
-		`SELECT DISTINCT f.id, f.name, f.path, f.extension, t.name
-		 FROM files f
-		 JOIN file_tags ft ON f.id = ft.file_id
-		 JOIN tags t ON ft.tag_id = t.id
-		 WHERE t.name LIKE ?
-		 ORDER BY f.name LIMIT ?`,
-		pattern, limit,
-	)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	var results []SearchFileResult
-	for rows.Next() {
-		var r SearchFileResult
-		var tagName string
-		if err := rows.Scan(&r.FileID, &r.Name, &r.Path, &r.Extension, &tagName); err != nil {
-			return nil, err
-		}
-		r.Snippet = fmt.Sprintf("tag: %s", tagName)
-		r.MatchSources = []string{"tag"}
-		results = append(results, r)
-	}
-	return results, rows.Err()
-}
-
 func (s *Store) Search(query string, scopes string, limit int) (*SearchResults, error) {
 	if limit <= 0 {
 		limit = 20
@@ -206,14 +173,6 @@ func (s *Store) Search(query string, scopes string, limit int) (*SearchResults, 
 		results, err := s.searchComments(query, limit)
 		if err != nil {
 			return nil, fmt.Errorf("search comments: %w", err)
-		}
-		allFiles = append(allFiles, results...)
-	}
-
-	if active["tags"] {
-		results, err := s.searchFilesByTag(query, limit)
-		if err != nil {
-			return nil, fmt.Errorf("search file tags: %w", err)
 		}
 		allFiles = append(allFiles, results...)
 	}

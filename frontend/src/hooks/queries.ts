@@ -13,10 +13,6 @@ import {
   getFileDetail,
   upsertComment,
   deleteComment,
-  addFileTag,
-  removeFileTag,
-  listTags,
-  listFileTags,
   getFileExtensions,
   getVirtualFolders,
   getVirtualFolderDetail,
@@ -28,20 +24,12 @@ import {
   listPhysicalFolders,
   listFolderGuards,
   setFolderGuard,
-  tagFile,
-  tagFiles,
-  tagWatchedDir,
   listFolderSuggestions,
   generateFolderSuggestions,
   acceptFolderSuggestion,
   dismissFolderSuggestion,
-  createTag,
-  listTagFiles,
-  deleteTag,
-  acceptTag,
   refineFolder,
   refineAllFolderSuggestions,
-  refineTag,
   listStrategies,
   type SearchScope,
 } from "../api"
@@ -171,18 +159,6 @@ export function useRefineAllFolderSuggestions() {
       setTimeout(() => {
         qc.invalidateQueries({ queryKey: ["folderSuggestions"] })
         qc.invalidateQueries({ queryKey: ["virtualFolders"] })
-      }, 3000)
-    },
-  })
-}
-
-export function useRefineTag() {
-  const qc = useQueryClient()
-  return useMutation({
-    mutationFn: (id: number) => refineTag(id),
-    onSuccess: () => {
-      setTimeout(() => {
-        qc.invalidateQueries({ queryKey: ["tags"] })
       }, 3000)
     },
   })
@@ -337,105 +313,6 @@ export function useDeleteComment() {
     onSuccess: (_data, fileId) => {
       qc.invalidateQueries({ queryKey: ["file", fileId] })
     },
-  })
-}
-
-export function useListTags() {
-  return useQuery({
-    queryKey: ["tags"],
-    queryFn: () => listTags(),
-  })
-}
-
-export function useListFileTags(fileId: number) {
-  return useQuery({
-    queryKey: ["fileTags", fileId],
-    queryFn: () => listFileTags(fileId),
-  })
-}
-
-export function useTags(source?: string) {
-  return useQuery({
-    queryKey: ["tags", source],
-    queryFn: () => listTags(source),
-  })
-}
-
-export function useCreateTag() {
-  const qc = useQueryClient()
-  return useMutation({
-    mutationFn: ({ name, source }: { name: string; source: string }) =>
-      createTag(name, source),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["tags"] }),
-  })
-}
-
-export function useDeleteTag() {
-  const qc = useQueryClient()
-  return useMutation({
-    mutationFn: (id: number) => deleteTag(id),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["tags"] }),
-  })
-}
-
-export function useAcceptTag() {
-  const qc = useQueryClient()
-  return useMutation({
-    mutationFn: (id: number) => acceptTag(id),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["tags"] }),
-  })
-}
-
-export function useTagFilesList(id: number, filters?: FileListFilterState) {
-  const limit = filters?.limit ?? 50
-  const offset = (filters?.page ?? 1) > 1 ? ((filters?.page ?? 1) - 1) * limit : 0
-  return useQuery({
-    queryKey: ["tagFiles", id, filters],
-    queryFn: () => listTagFiles(id, {
-      extension: filters?.extension,
-      processing_status: filters?.processing_status,
-      sort: filters?.sort,
-      order: filters?.order,
-      limit,
-      offset,
-    }),
-  })
-}
-
-export function useAddFileTag() {
-  const qc = useQueryClient()
-  return useMutation({
-    mutationFn: ({ fileId, tagId, source }: { fileId: number; tagId: number; source: string }) =>
-      addFileTag(fileId, tagId, source),
-  })
-}
-
-export function useRemoveFileTag() {
-  const qc = useQueryClient()
-  return useMutation({
-    mutationFn: ({ fileId, tagId }: { fileId: number; tagId: number }) =>
-      removeFileTag(fileId, tagId),
-  })
-}
-
-export function useTagFile() {
-  const qc = useQueryClient()
-  return useMutation({
-    mutationFn: (fileId: number) => tagFile(fileId),
-  })
-}
-
-export function useTagFiles() {
-  const qc = useQueryClient()
-  return useMutation({
-    mutationFn: (params?: Parameters<typeof tagFiles>[0]) => tagFiles(params),
-  })
-}
-
-export function useTagWatchedDir() {
-  const qc = useQueryClient()
-  return useMutation({
-    mutationFn: (id: number) => tagWatchedDir(id),
   })
 }
 

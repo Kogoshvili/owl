@@ -19,12 +19,6 @@ type StrategyInfo struct {
 	SpeedHint   string     `json:"speed_hint"`
 }
 
-type TagSuggestion struct {
-	Name       string
-	FileIDs    []int64
-	Confidence float64
-}
-
 type FolderSuggestion struct {
 	Name        string
 	Description string
@@ -42,7 +36,6 @@ type Strategy interface {
 	Available() bool
 	SpeedHint() string
 
-	SuggestTags(ctx context.Context, fileIDs []int64) ([]TagSuggestion, error)
 	SuggestFolders(ctx context.Context, fileIDs []int64) ([]FolderSuggestion, error)
 	SuggestFoldersWithCorpus(ctx context.Context, fileIDs []int64, corpus *Corpus) ([]FolderSuggestion, error)
 }

@@ -21,41 +21,6 @@ func TestBuildClusterPrompt(t *testing.T) {
 	require.Contains(t, prompt, `"name": "Specific Name"`)
 }
 
-func TestBuildTagPrompt(t *testing.T) {
-	prompt := buildTagPrompt("data", []string{"file1.txt", "file2.csv"}, []string{"data", "report"})
-	require.Contains(t, prompt, `Tag: "data"`)
-	require.Contains(t, prompt, "file1.txt")
-	require.Contains(t, prompt, "file2.csv")
-	require.Contains(t, prompt, "Keywords: data, report")
-	require.Contains(t, prompt, `"keep": true`)
-}
-
-func TestBuildFolderGuardPrompt(t *testing.T) {
-	t.Run("with parent context", func(t *testing.T) {
-		prompt := buildFolderGuardPrompt("AxelChat", []string{"src", "docs"}, []string{"main.go", "readme.md"}, "Downloads", false)
-		require.Contains(t, prompt, `Folder: "AxelChat"`)
-		require.Contains(t, prompt, `Parent: "Downloads" (unrelated files)`)
-		require.Contains(t, prompt, "Subfolders: src, docs")
-		require.Contains(t, prompt, "- main.go")
-		require.Contains(t, prompt, `"related": true/false`)
-	})
-
-	t.Run("no subfolders", func(t *testing.T) {
-		prompt := buildFolderGuardPrompt("stuff", nil, []string{"a.txt"}, "", false)
-		require.Contains(t, prompt, "Subfolders: (none)")
-	})
-
-	t.Run("no files", func(t *testing.T) {
-		prompt := buildFolderGuardPrompt("stuff", []string{"sub"}, nil, "", false)
-		require.Contains(t, prompt, "Files:\n- (none)")
-	})
-
-	t.Run("guarded parent", func(t *testing.T) {
-		prompt := buildFolderGuardPrompt("sub", nil, nil, "Parent", true)
-		require.Contains(t, prompt, `Parent: "Parent" (related files)`)
-	})
-}
-
 func TestBuildKeywordExtractionPrompt(t *testing.T) {
 	files := []struct {
 		ID      int64
@@ -99,30 +64,6 @@ func TestParseClusterResponse(t *testing.T) {
 	t.Run("malformed JSON", func(t *testing.T) {
 		_, err := parseClusterResponse(`{bad json}`, nil)
 		require.Error(t, err)
-	})
-}
-
-func TestParseTagResponse(t *testing.T) {
-	t.Run("keep true", func(t *testing.T) {
-		raw := `{"keep": "true", "better_name": "reports", "description": "desc"}`
-		result, err := parseTagResponse(raw)
-		require.NoError(t, err)
-		require.True(t, result.Keep)
-		require.Equal(t, "reports", result.BetterName)
-	})
-
-	t.Run("keep false", func(t *testing.T) {
-		raw := `{"keep": "false", "better_name": "", "description": ""}`
-		result, err := parseTagResponse(raw)
-		require.NoError(t, err)
-		require.False(t, result.Keep)
-	})
-
-	t.Run("with markdown fences", func(t *testing.T) {
-		raw := "```\n{\"keep\": \"true\"}\n```"
-		result, err := parseTagResponse(raw)
-		require.NoError(t, err)
-		require.True(t, result.Keep)
 	})
 }
 

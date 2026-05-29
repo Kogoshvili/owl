@@ -26,23 +26,6 @@ export interface File {
   processable?: boolean | null
 }
 
-export interface Tag {
-  id: number
-  name: string
-  source: string
-  description: string
-  created_at: string
-}
-
-export interface TagWithCount {
-  id: number
-  name: string
-  source: string
-  description: string
-  file_count: number
-  created_at: string
-}
-
 export interface Comment {
   id: number
   file_id: number
@@ -54,7 +37,6 @@ export interface Comment {
 export interface FileDetail {
   file: File
   comment: Comment | null
-  tags: Tag[]
   extracted_content: string | null
 }
 
@@ -176,22 +158,6 @@ export function deleteComment(fileId: number): Promise<void> {
   return request<void>(`/files/${fileId}/comment`, { method: "DELETE" })
 }
 
-export function listFileTags(fileId: number): Promise<Tag[]> {
-  return request<Tag[]>(`/files/${fileId}/tags`)
-}
-
-export function addFileTag(fileId: number, name: string): Promise<Tag> {
-  return request<Tag>(`/files/${fileId}/tags`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ name }),
-  })
-}
-
-export function removeFileTag(fileId: number, tagId: number): Promise<void> {
-  return request<void>(`/files/${fileId}/tags/${tagId}`, { method: "DELETE" })
-}
-
 export interface VirtualFolder {
   id: number
   name: string
@@ -270,7 +236,7 @@ export interface SearchResults {
   files: SearchFileResult[]
 }
 
-export const ALL_SCOPES = ["filenames", "content", "comments", "tags"] as const
+export const ALL_SCOPES = ["filenames", "content", "comments"] as const
 export type SearchScope = typeof ALL_SCOPES[number]
 
 export function searchFiles(query: string, scopes?: SearchScope[]): Promise<SearchResults> {
@@ -370,34 +336,6 @@ export function setFolderGuard(path: string, guarded: boolean): Promise<{status:
   })
 }
 
-export function tagFile(id: number): Promise<{tags: Tag[]}> {
-  return request<{tags: Tag[]}>(`/intelligence/files/${id}/tag`, { method: "POST" })
-}
-
-export function tagFiles(params?: {
-  watched_dir_id?: number
-  extension?: string
-  processing_status?: string
-  limit?: number
-}): Promise<{count: number, tagged: number, tag_count: number}> {
-  const p = new URLSearchParams()
-  if (params?.watched_dir_id) p.set("watched_dir_id", String(params.watched_dir_id))
-  if (params?.extension) p.set("extension", params.extension)
-  if (params?.processing_status) p.set("processing_status", params.processing_status)
-  if (params?.limit) p.set("limit", String(params.limit))
-  return request<{count: number, tagged: number, tag_count: number}>(`/intelligence/files/tag?${p}`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(params || {}),
-  })
-}
-
-export function tagWatchedDir(id: number): Promise<{count: number, tagged: number, tag_count: number}> {
-  return request<{count: number, tagged: number, tag_count: number}>(`/intelligence/watched-directories/${id}/tag`, {
-    method: "POST",
-  })
-}
-
 export function listFolderSuggestions(): Promise<Record<string, FolderSuggestion>> {
   return request<Record<string, FolderSuggestion>>("/intelligence/folders/suggestions")
 }
@@ -427,36 +365,6 @@ export function dismissFolderSuggestion(id: number): Promise<void> {
   })
 }
 
-export function listTags(source?: "auto" | "manual"): Promise<TagWithCount[]> {
-  const p = new URLSearchParams()
-  if (source) p.set("source", source)
-  return request<TagWithCount[]>(`/intelligence/tags?${p}`)
-}
-
-export function createTag(name: string): Promise<Tag> {
-  return request<Tag>("/intelligence/tags", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ name }),
-  })
-}
-
-export function listTagFiles(id: number, params?: FileListParams): Promise<FileListResponse> {
-  return request<FileListResponse>(`/intelligence/tags/${id}/files?${buildFileParams(params)}`)
-}
-
-export function deleteTag(id: number): Promise<void> {
-  return request<void>(`/intelligence/tags/${id}`, {
-    method: "DELETE",
-  })
-}
-
-export function acceptTag(id: number): Promise<Tag> {
-  return request<Tag>(`/intelligence/tags/${id}/accept`, {
-    method: "POST",
-  })
-}
-
 export function refineFolder(id: number): Promise<{related: boolean, action: string, folder?: VirtualFolder}> {
   return request<{related: boolean, action: string, folder?: VirtualFolder}>(`/intelligence/refine/folder/${id}`, {
     method: "POST",
@@ -469,11 +377,9 @@ export function refineAllFolderSuggestions(): Promise<{status: string, count: nu
   })
 }
 
-export function refineTag(id: number): Promise<{meaningful: boolean, action: string, tag?: Tag}> {
-  return request<{meaningful: boolean, action: string, tag?: Tag}>(`/intelligence/refine/tag/${id}`, {
-    method: "POST",
-  })
-}
-
 export function getUnprocessedCount(watchedDirId?: number): Promise<{count: number}> {
+  if (watchedDirId) {
+    return request<{count: number}>(`/intelligence/files/unprocessed/count?watched_dir_id=${watchedDirId}`)
+  }
+  return request<{count: number}>("/intelligence/files/unprocessed/count")
 }

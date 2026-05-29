@@ -1,6 +1,6 @@
 import { useState } from "preact/hooks"
-import { useFileDetail, useUpsertComment, useDeleteComment, useAddFileTag, useRemoveFileTag, useExtractFile, useTagFile } from "../hooks/queries"
-import { getFileRawUrl, type File, type Tag } from "../api"
+import { useFileDetail, useUpsertComment, useDeleteComment, useExtractFile } from "../hooks/queries"
+import { getFileRawUrl, type File } from "../api"
 
 function formatBytes(bytes: number): string {
   if (bytes === 0) return "0 B"
@@ -36,7 +36,7 @@ export function FileDetailPage({ id }: { id?: string }) {
   if (query.isError) return <div class="page"><div class="empty">Error: {query.error?.message}</div></div>
   if (!query.data) return <div class="page"><div class="empty">File not found</div></div>
 
-  const { file, comment, tags, extracted_content } = query.data
+  const { file, comment, extracted_content } = query.data
 
   return (
     <div class="page">
@@ -54,7 +54,6 @@ export function FileDetailPage({ id }: { id?: string }) {
       <FileViewer file={file} />
       <ExtractedContentPreview content={extracted_content} show={showExtracted} onToggle={() => setShowExtracted(!showExtracted)} />
       <CommentSection fileId={file.id} comment={comment} />
-      <TagsSection fileId={file.id} tags={tags} />
     </div>
   )
 }
@@ -251,72 +250,6 @@ function CommentSection({ fileId, comment }: { fileId: number; comment: { conten
           {comment?.content ? <p>{comment.content}</p> : <p class="empty">No comment. Click to add one.</p>}
         </div>
       )}
-    </section>
-  )
-}
-
-function TagsSection({ fileId, tags }: { fileId: number; tags: Tag[] }) {
-  const [input, setInput] = useState("")
-  const addMutation = useAddFileTag()
-  const removeMutation = useRemoveFileTag()
-  const autoTagMutation = useTagFile()
-
-  const handleAdd = () => {
-    const name = input.trim()
-    if (!name) return
-    addMutation.mutate(
-      { fileId, name },
-      { onSuccess: () => setInput("") }
-    )
-  }
-
-  const handleKeyDown = (e: KeyboardEvent) => {
-    if (e.key === "Enter") {
-      e.preventDefault()
-      handleAdd()
-    }
-  }
-
-  return (
-    <section class="detail-section">
-      <div class="detail-section-header">
-        <h2>Tags</h2>
-        <button
-          class="btn btn-sm"
-          disabled={autoTagMutation.isPending}
-          onClick={() => autoTagMutation.mutate(fileId)}
-        >
-          {autoTagMutation.isPending ? "Tagging..." : "Auto-Tag"}
-        </button>
-      </div>
-      <div class="detail-tags">
-        {tags.map(tag => (
-          <span class={`detail-tag ${tag.source === "auto" ? "tag-auto" : "tag-manual"}`} key={tag.id}>
-            {tag.name}
-            <span class="tag-source-badge">{tag.source}</span>
-            <button
-              class="detail-tag-remove"
-              onClick={() => removeMutation.mutate({ fileId, tagId: tag.id })}
-              disabled={removeMutation.isPending}
-            >
-              x
-            </button>
-          </span>
-        ))}
-      </div>
-      {tags.length === 0 && <div class="empty" style="text-align:left;padding:8px 0">No tags</div>}
-      <div class="detail-tag-form">
-        <input
-          class="detail-tag-input"
-          value={input}
-          onInput={(e) => setInput((e.target as HTMLInputElement).value)}
-          onKeyDown={handleKeyDown}
-          placeholder="Add tag..."
-        />
-        <button class="btn btn-sm" onClick={handleAdd} disabled={addMutation.isPending || !input.trim()}>
-          Add
-        </button>
-      </div>
     </section>
   )
 }

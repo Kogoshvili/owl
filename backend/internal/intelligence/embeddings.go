@@ -37,54 +37,6 @@ func (s *EmbeddingsStrategy) Description() string   { return "Semantic clusterin
 func (s *EmbeddingsStrategy) Available() bool       { return s.embeddings != nil }
 func (s *EmbeddingsStrategy) SpeedHint() string     { return "~20-40min for 12K files" }
 
-func (s *EmbeddingsStrategy) SuggestTags(ctx context.Context, fileIDs []int64) ([]TagSuggestion, error) {
-	slog.Info("strategy[embeddings]: suggesting tags", "files", len(fileIDs))
-
-	embeddings, err := s.computeEmbeddings(ctx, fileIDs)
-	if err != nil {
-		return nil, err
-	}
-
-	points := make([]cluster.Point, 0, len(fileIDs))
-	for _, fileID := range fileIDs {
-		if emb, ok := embeddings[fileID]; ok {
-			points = append(points, cluster.Point{ID: fileID, Vec: emb})
-		}
-	}
-
-	clusters := cluster.DBSCAN(points, 0.3, 3)
-
-	suggestions := make([]TagSuggestion, 0, len(clusters))
-	for _, cl := range clusters {
-		if len(cl.Points) < minTagFileCount {
-			continue
-		}
-
-		fileIDs := make([]int64, len(cl.Points))
-		for i, p := range cl.Points {
-			fileIDs[i] = p.ID
-		}
-
-		name, err := s.inferTagName(ctx, fileIDs)
-		if err != nil || name == "" {
-			continue
-		}
-
-		suggestions = append(suggestions, TagSuggestion{
-			Name:       name,
-			FileIDs:    fileIDs,
-			Confidence: float64(len(cl.Points)) / float64(len(points)),
-		})
-	}
-
-	sort.Slice(suggestions, func(i, j int) bool {
-		return len(suggestions[i].FileIDs) > len(suggestions[j].FileIDs)
-	})
-
-	slog.Info("strategy[embeddings]: tag suggestions", "count", len(suggestions))
-	return suggestions, nil
-}
-
 func (s *EmbeddingsStrategy) SuggestFolders(ctx context.Context, fileIDs []int64) ([]FolderSuggestion, error) {
 	return s.SuggestFoldersWithCorpus(ctx, fileIDs, nil)
 }
@@ -246,54 +198,6 @@ func (s *EmbeddingsStrategy) buildEmbeddingText(fileID int64) string {
 	}
 
 	return strings.Join(parts, " ")
-}
-
-func (s *EmbeddingsStrategy) inferTagName(ctx context.Context, fileIDs []int64) (string, error) {
-	if len(fileIDs) == 0 {
-		return "", nil
-	}
-
-	names := make([]string, 0, len(fileIDs))
-	for _, id := range fileIDs {
-		file, err := s.store.GetFile(id)
-		if err == nil && file != nil {
-			names = append(names, file.Name)
-		}
-	}
-
-	if s.llm != nil && s.llm.IsAvailable(ctx) {
-		keywords := []string{}
-		for _, id := range fileIDs {
-			kws, err := s.analyzer.GetFileKeywordsWithFallback(id, 3)
-			if err == nil {
-				for _, kw := range kws {
-					keywords = append(keywords, kw.Term)
-				}
-			}
-			if len(keywords) >= 10 {
-				break
-			}
-		}
-
-		refinement, err := s.llm.RefineTag(ctx, "auto-group", names, keywords)
-		if err == nil && refinement.Keep {
-			name := refinement.BetterName
-			if name == "" {
-				name = "auto-group"
-			}
-			return name, nil
-		}
-	}
-
-	file, err := s.store.GetFile(fileIDs[0])
-	if err == nil && file != nil {
-		ext := file.Extension
-		if ext != "" {
-			return getExtensionTag(ext), nil
-		}
-	}
-
-	return "", nil
 }
 
 func (s *EmbeddingsStrategy) avgIntraClusterSimilarity(points []cluster.Point, embeddings map[int64][]float32) float32 {

@@ -30,69 +30,6 @@ func (s *ContentTFIDFStrategy) Description() string   { return "Tags and folders
 func (s *ContentTFIDFStrategy) Available() bool       { return true }
 func (s *ContentTFIDFStrategy) SpeedHint() string     { return "~30s for 12K files" }
 
-func (s *ContentTFIDFStrategy) SuggestTags(ctx context.Context, fileIDs []int64) ([]TagSuggestion, error) {
-	slog.Info("strategy[content_tfidf]: suggesting tags", "files", len(fileIDs))
-
-	corpusKeywords, err := s.analyzer.BuildCorpusTFIDFWithFallback(fileIDs)
-	if err != nil {
-		return nil, err
-	}
-
-	tagCandidates := make(map[string][]int64)
-	for _, fileID := range fileIDs {
-		keywords, ok := corpusKeywords[fileID]
-		if !ok {
-			continue
-		}
-
-		file, err := s.store.GetFile(fileID)
-		if err != nil || file == nil {
-			continue
-		}
-
-		seen := make(map[string]bool)
-
-		extTag := getExtensionTag(file.Extension)
-		if extTag != "" && !seen[extTag] {
-			tagCandidates[extTag] = append(tagCandidates[extTag], fileID)
-			seen[extTag] = true
-		}
-
-		maxContentTags := 10
-		for i, kw := range keywords {
-			if i >= maxContentTags {
-				break
-			}
-			if !seen[kw.Term] {
-				tagCandidates[kw.Term] = append(tagCandidates[kw.Term], fileID)
-				seen[kw.Term] = true
-			}
-		}
-	}
-
-	for name, ids := range tagCandidates {
-		if len(ids) < minTagFileCount {
-			delete(tagCandidates, name)
-		}
-	}
-
-	suggestions := make([]TagSuggestion, 0, len(tagCandidates))
-	for tagName, ids := range tagCandidates {
-		suggestions = append(suggestions, TagSuggestion{
-			Name:       tagName,
-			FileIDs:    ids,
-			Confidence: float64(len(ids)) / float64(len(fileIDs)),
-		})
-	}
-
-	sort.Slice(suggestions, func(i, j int) bool {
-		return len(suggestions[i].FileIDs) > len(suggestions[j].FileIDs)
-	})
-
-	slog.Info("strategy[content_tfidf]: tag suggestions", "count", len(suggestions))
-	return suggestions, nil
-}
-
 func (s *ContentTFIDFStrategy) SuggestFolders(ctx context.Context, fileIDs []int64) ([]FolderSuggestion, error) {
 	return s.SuggestFoldersWithCorpus(ctx, fileIDs, nil)
 }

@@ -22,23 +22,6 @@ Respond ONLY with valid JSON (no markdown):
 {"related": true, "removed": [], "name": "Specific Name", "description": "One sentence description"}`
 }
 
-func buildTagPrompt(tagName string, fileNames []string, keywords []string) string {
-	fileList := strings.Join(fileNames, "\n- ")
-	keywordList := strings.Join(keywords, ", ")
-
-	return `Tag: "` + tagName + `"
-Files:
-- ` + fileList + `
-
-Keywords: ` + keywordList + `
-
-Is this tag specific enough to be useful?
-Example: "data" is too vague. "quarterly_report" is specific.
-
-Respond ONLY with valid JSON (no markdown):
-{"keep": true, "better_name": "better name if needed", "description": "what this tag represents"}`
-}
-
 func parseClusterResponse(raw string, fileIDs []int64) (*RefinementResult, error) {
 	raw = strings.TrimSpace(raw)
 	raw = strings.TrimPrefix(raw, "```json")
@@ -67,28 +50,6 @@ func parseClusterResponse(raw string, fileIDs []int64) (*RefinementResult, error
 		Related:     result.Related,
 		RemovedIDs:  removedIDs,
 		Name:        result.Name,
-		Description: result.Description,
-	}, nil
-}
-
-func parseTagResponse(raw string) (*TagRefinementResult, error) {
-	raw = strings.TrimSpace(raw)
-	raw = strings.TrimPrefix(raw, "```json")
-	raw = strings.TrimPrefix(raw, "```")
-	raw = strings.TrimSuffix(raw, "```")
-
-	var result struct {
-		Keep        string `json:"keep"`
-		BetterName  string `json:"better_name"`
-		Description string `json:"description"`
-	}
-	if err := json.Unmarshal([]byte(raw), &result); err != nil {
-		return nil, err
-	}
-
-	return &TagRefinementResult{
-		Keep:        result.Keep == "true",
-		BetterName:  result.BetterName,
 		Description: result.Description,
 	}, nil
 }

@@ -130,7 +130,6 @@ func (h *FileHandler) Get(w http.ResponseWriter, r *http.Request) {
 	}
 
 	comment, _ := h.store.GetComment(id)
-	tags, _ := h.store.ListFileTags(id)
 	extractedContent, _ := h.store.GetFileContent(id)
 
 	resp := addProcessable([]store.File{*file})
@@ -138,11 +137,7 @@ func (h *FileHandler) Get(w http.ResponseWriter, r *http.Request) {
 	result := map[string]any{
 		"file":              resp[0],
 		"comment":           comment,
-		"tags":              tags,
 		"extracted_content": extractedContent,
-	}
-	if tags == nil {
-		result["tags"] = []store.Tag{}
 	}
 	if extractedContent == "" {
 		result["extracted_content"] = nil

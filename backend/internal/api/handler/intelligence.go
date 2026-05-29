@@ -21,7 +21,6 @@ import (
 type IntelligenceHandler struct {
 	store            *store.Store
 	analyzer         *intelligence.Analyzer
-	tagger           *intelligence.Tagger
 	suggester        *intelligence.Suggester
 	llm              *llm.Client
 	registry         *intelligence.Registry
@@ -52,7 +51,6 @@ func NewIntelligenceHandler(s *store.Store, llmClient *llm.Client, cfg *config.C
 		registry.Register(intelligence.NewEmbeddingsStrategy(analyzer, s, llmClient, embedClient))
 	}
 
-	tagger := intelligence.NewTagger(analyzer, s, llmClient, registry)
 	suggester := intelligence.NewSuggester(analyzer, s, llmClient, registry)
 
 	folderStrategy := intelligence.ParseStrategyID(cfg.LLM.FolderStrategy)
@@ -60,7 +58,6 @@ func NewIntelligenceHandler(s *store.Store, llmClient *llm.Client, cfg *config.C
 	return &IntelligenceHandler{
 		store:            s,
 		analyzer:         analyzer,
-		tagger:           tagger,
 		suggester:        suggester,
 		llm:              llmClient,
 		registry:         registry,
@@ -136,128 +133,6 @@ func (h *IntelligenceHandler) AnalyzeFolderCoherence(w http.ResponseWriter, r *h
 	}
 
 	writeJSON(w, http.StatusOK, result)
-}
-
-func (h *IntelligenceHandler) TagFile(w http.ResponseWriter, r *http.Request) {
-	id, ok := parsePathID(w, r, "id")
-	if !ok {
-		return
-	}
-
-	tags, err := h.tagger.AutoTagFile(id)
-	if err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
-		return
-	}
-
-	writeJSON(w, http.StatusOK, map[string]any{"tags": tags})
-}
-
-type tagFilesRequest struct {
-	WatchedDirID     *int64  `json:"watched_dir_id"`
-	Extension        *string `json:"extension"`
-	ProcessingStatus *string `json:"processing_status"`
-	Limit            *int    `json:"limit"`
-}
-
-func (h *IntelligenceHandler) TagFiles(w http.ResponseWriter, r *http.Request) {
-	var req tagFilesRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid request body")
-		return
-	}
-
-	strategyID := h.folderStrategy
-
-	filter := store.FileFilter{
-		Extension:        req.Extension,
-		ProcessingStatus: req.ProcessingStatus,
-		WatchedDirID:     req.WatchedDirID,
-	}
-
-	limit := 100
-	if req.Limit != nil && *req.Limit > 0 {
-		limit = *req.Limit
-	}
-	filter.Limit = limit
-
-	files, err := h.store.ListFiles(filter)
-	if err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
-		return
-	}
-
-	slog.Info("auto-tagging files", "count", len(files), "strategy", strategyID)
-
-	fileIDs := make([]int64, len(files))
-	for i, f := range files {
-		fileIDs[i] = f.ID
-	}
-
-	result, err := h.tagger.AutoTagFiles(r.Context(), fileIDs, strategyID)
-	if err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
-		return
-	}
-
-	tagCount := 0
-	for _, tags := range result {
-		tagCount += len(tags)
-	}
-
-	slog.Info("auto-tag complete", "files", len(files), "tagged", len(result), "tags_created", tagCount)
-
-	writeJSON(w, http.StatusOK, map[string]any{
-		"count":     len(files),
-		"tagged":    len(result),
-		"tag_count": tagCount,
-	})
-}
-
-func (h *IntelligenceHandler) TagWatchedDir(w http.ResponseWriter, r *http.Request) {
-	dirID, ok := parsePathID(w, r, "id")
-	if !ok {
-		return
-	}
-
-	strategyID := h.folderStrategy
-
-	filter := store.FileFilter{
-		WatchedDirID: &dirID,
-		Limit:        1000,
-	}
-
-	files, err := h.store.ListFiles(filter)
-	if err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
-		return
-	}
-
-	slog.Info("auto-tagging watched dir", "dir_id", dirID, "count", len(files), "strategy", strategyID)
-
-	fileIDs := make([]int64, len(files))
-	for i, f := range files {
-		fileIDs[i] = f.ID
-	}
-
-	result, err := h.tagger.AutoTagFiles(r.Context(), fileIDs, strategyID)
-	if err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
-		return
-	}
-
-	tagCount := 0
-	for _, tags := range result {
-		tagCount += len(tags)
-	}
-
-	slog.Info("auto-tag dir complete", "dir_id", dirID, "files", len(files), "tagged", len(result), "tags_created", tagCount)
-
-	writeJSON(w, http.StatusOK, map[string]any{
-		"count":     len(files),
-		"tagged":    len(result),
-		"tag_count": tagCount,
-	})
 }
 
 func (h *IntelligenceHandler) ListFolderSuggestions(w http.ResponseWriter, r *http.Request) {
@@ -861,122 +736,6 @@ func (h *IntelligenceHandler) DismissFolderSuggestion(w http.ResponseWriter, r *
 	w.WriteHeader(http.StatusNoContent)
 }
 
-func (h *IntelligenceHandler) ListTags(w http.ResponseWriter, r *http.Request) {
-	source := r.URL.Query().Get("source")
-	var sourcePtr *string
-	if source == "auto" || source == "manual" {
-		sourcePtr = &source
-	}
-
-	tags, err := h.store.ListTagsWithCount(sourcePtr)
-	if err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
-		return
-	}
-
-	writeJSON(w, http.StatusOK, tags)
-}
-
-func (h *IntelligenceHandler) CreateTag(w http.ResponseWriter, r *http.Request) {
-	var req struct {
-		Name string `json:"name"`
-	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid request body")
-		return
-	}
-
-	if req.Name == "" {
-		writeError(w, http.StatusBadRequest, "name is required")
-		return
-	}
-
-	tag, err := h.store.EnsureTag(req.Name, "manual")
-	if err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
-		return
-	}
-
-	writeJSON(w, http.StatusOK, tag)
-}
-
-func (h *IntelligenceHandler) ListTagFiles(w http.ResponseWriter, r *http.Request) {
-	id, ok := parsePathID(w, r, "id")
-	if !ok {
-		return
-	}
-
-	filter := store.FileFilter{
-		SortBy:    r.URL.Query().Get("sort"),
-		SortOrder: r.URL.Query().Get("order"),
-	}
-
-	if ext := r.URL.Query().Get("extension"); ext != "" {
-		filter.Extension = &ext
-	}
-	if status := r.URL.Query().Get("processing_status"); status != "" {
-		filter.ProcessingStatus = &status
-	}
-
-	limit := 50
-	if v := r.URL.Query().Get("limit"); v != "" {
-		if n, err := strconv.Atoi(v); err == nil && n > 0 {
-			limit = n
-		}
-	}
-	filter.Limit = limit
-
-	offset := 0
-	if v := r.URL.Query().Get("offset"); v != "" {
-		if n, err := strconv.Atoi(v); err == nil && n >= 0 {
-			offset = n
-		}
-	}
-	filter.Offset = offset
-
-	total, files, err := h.store.ListFilesByTag(id, filter)
-	if err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
-		return
-	}
-
-	writeJSON(w, http.StatusOK, map[string]any{
-		"files": files,
-		"total": total,
-		"limit": limit,
-		"offset": offset,
-	})
-}
-
-func (h *IntelligenceHandler) DeleteTag(w http.ResponseWriter, r *http.Request) {
-	id, ok := parsePathID(w, r, "id")
-	if !ok {
-		return
-	}
-
-	if err := h.store.DeleteTag(id); err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
-		return
-	}
-
-	w.WriteHeader(http.StatusNoContent)
-}
-
-func (h *IntelligenceHandler) AcceptTag(w http.ResponseWriter, r *http.Request) {
-	id, ok := parsePathID(w, r, "id")
-	if !ok {
-		return
-	}
-
-	tag, err := h.store.UpdateTagSource(id, "manual")
-	if err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
-		return
-	}
-
-	writeJSON(w, http.StatusOK, tag)
-}
-
 func (h *IntelligenceHandler) RefineFolder(w http.ResponseWriter, r *http.Request) {
 	id, ok := parsePathID(w, r, "id")
 	if !ok {
@@ -1146,91 +905,6 @@ func (h *IntelligenceHandler) refineFolderAsync(id int64) {
 			h.store.RemoveFileFromFolder(id, fileID)
 		}
 	}
-}
-
-func (h *IntelligenceHandler) RefineTag(w http.ResponseWriter, r *http.Request) {
-	id, ok := parsePathID(w, r, "id")
-	if !ok {
-		return
-	}
-
-	slog.Info("request method=POST path=/intelligence/refine/tag", "id", id)
-
-	if h.llm == nil {
-		writeError(w, http.StatusServiceUnavailable, "LLM not configured")
-		return
-	}
-
-	tag, err := h.store.GetTag(id)
-	if err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
-		return
-	}
-
-	if tag == nil {
-		writeError(w, http.StatusNotFound, "tag not found")
-		return
-	}
-
-	files, err := h.store.GetFilesByTag(id)
-	if err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
-		return
-	}
-
-	fileNames := make([]string, len(files))
-	for i, f := range files {
-		fileNames[i] = f.Name
-	}
-
-	keywords := []string{}
-	for _, f := range files {
-		if f.ProcessingStatus == "processed" {
-			kws, err := h.analyzer.GetFileKeywords(f.ID, 5)
-			if err == nil {
-				for _, kw := range kws {
-					keywords = append(keywords, kw.Term)
-				}
-			}
-		}
-		if len(keywords) >= 10 {
-			break
-		}
-	}
-
-	slog.Info("llm: starting refine tag", "id", id, "name", tag.Name, "files", len(fileNames))
-
-	go func() {
-		refinement, err := h.llm.RefineTag(context.Background(), tag.Name, fileNames, keywords)
-		if err != nil {
-			slog.Error("llm: refine tag failed", "id", id, "name", tag.Name, "error", err)
-			return
-		}
-
-		if !refinement.Keep {
-			slog.Info("llm: tag not specific enough, deleting", "id", id, "name", tag.Name)
-			h.store.DeleteTag(id)
-			return
-		}
-
-		if refinement.BetterName != "" && refinement.BetterName != tag.Name {
-			if err := h.store.UpdateTagName(id, refinement.BetterName); err != nil {
-				slog.Error("llm: refine tag failed to rename", "id", id, "error", err)
-				return
-			}
-			slog.Info("llm: tag refined", "id", id, "old_name", tag.Name, "new_name", refinement.BetterName)
-		}
-
-		if refinement.Description != "" {
-			if err := h.store.UpdateTagDescription(id, refinement.Description); err != nil {
-				slog.Error("llm: refine tag failed to set description", "id", id, "error", err)
-				return
-			}
-			slog.Info("llm: tag refined", "id", id, "name", tag.Name, "description", refinement.Description)
-		}
-	}()
-
-	writeJSON(w, http.StatusAccepted, map[string]any{"status": "refining", "id": id})
 }
 
 func (h *IntelligenceHandler) GetUnprocessedCount(w http.ResponseWriter, r *http.Request) {

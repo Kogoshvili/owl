@@ -62,7 +62,6 @@ type modelList struct {
 
 const (
 	clusterRefineTimeout = 120 * time.Second
-	tagRefineTimeout     = 120 * time.Second
 	heartbeatTimeout     = 5 * time.Second
 	maxRetries           = 3
 )
@@ -210,65 +209,6 @@ func (c *Client) RefineCluster(ctx context.Context, files []ClusterFile, fileIDs
 	}
 
 	slog.Info("llm: refined cluster", "name", result.Name, "related", result.Related, "removed", len(result.RemovedIDs), "description", result.Description)
-	return result, nil
-}
-
-func (c *Client) RefineTag(ctx context.Context, tagName string, fileNames []string, keywords []string) (*TagRefinementResult, error) {
-	if !c.cfg.Enabled || c.http == nil {
-		return nil, fmt.Errorf("LLM not available")
-	}
-
-	if !c.ready {
-		if !c.IsAvailable(ctx) {
-			return nil, fmt.Errorf("LLM not available")
-		}
-	}
-
-	slog.Info("llm: refining tag", "name", tagName, "files", len(fileNames))
-
-	var result *TagRefinementResult
-	var lastErr error
-
-	for attempt := 1; attempt <= maxRetries; attempt++ {
-		if attempt > 1 {
-			slog.Info("llm: refine tag retry", "attempt", attempt, "last_error", lastErr)
-		}
-
-		prompt := buildTagPrompt(tagName, fileNames, keywords)
-
-		chatCtx, cancel := context.WithTimeout(context.Background(), tagRefineTimeout)
-		var rawResponse string
-		var err error
-
-		c.mu.Lock()
-		rawResponse, err = c.chatCompletion(chatCtx, prompt)
-		c.mu.Unlock()
-		cancel()
-
-		if err != nil {
-			lastErr = err
-			if attempt == maxRetries {
-				slog.Error("llm: refine tag failed after retries", "name", tagName, "files", len(fileNames), "error", err)
-				return nil, err
-			}
-			continue
-		}
-
-		result, err = parseTagResponse(rawResponse)
-		if err != nil {
-			lastErr = err
-			if attempt == maxRetries {
-				slog.Error("llm: parse tag response failed after retries", "name", tagName, "files", len(fileNames), "error", err, "raw", rawResponse)
-				return nil, err
-			}
-			slog.Warn("llm: parse tag response failed, retrying", "name", tagName, "attempt", attempt, "error", err)
-			continue
-		}
-
-		break
-	}
-
-	slog.Info("llm: refined tag", "name", tagName, "keep", result.Keep, "better_name", result.BetterName, "description", result.Description)
 	return result, nil
 }
 

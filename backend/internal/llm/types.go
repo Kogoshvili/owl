@@ -15,12 +15,6 @@ type RefinementResult struct {
 	Description string
 }
 
-type TagRefinementResult struct {
-	Keep        bool
-	BetterName  string
-	Description string
-}
-
 type KeywordExtraction struct {
 	FileID   int64
 	Keywords []string

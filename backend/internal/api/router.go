@@ -18,7 +18,6 @@ func NewRouter(s *store.Store, sc *scanner.Scanner, ext *extractor.Extractor, ll
 	wdh := handler.NewWatchedDirHandler(s, sc, ext)
 	fh := handler.NewFileHandler(s, ext)
 	ch := handler.NewCommentHandler(s)
-	th := handler.NewTagHandler(s)
 	vfh := handler.NewVirtualFolderHandler(s)
 	sh := handler.NewSearchHandler(s)
 	ih := handler.NewIntelligenceHandler(s, llmClient, cfg)
@@ -42,10 +41,6 @@ func NewRouter(s *store.Store, sc *scanner.Scanner, ext *extractor.Extractor, ll
 	mux.HandleFunc("PUT /files/{id}/comment", ch.Upsert)
 	mux.HandleFunc("DELETE /files/{id}/comment", ch.Delete)
 
-	mux.HandleFunc("GET /tags", th.List)
-	mux.HandleFunc("POST /files/{id}/tags", th.AddFileTag)
-	mux.HandleFunc("DELETE /files/{id}/tags/{tagId}", th.RemoveFileTag)
-
 	mux.HandleFunc("GET /virtual-folders", vfh.List)
 	mux.HandleFunc("POST /virtual-folders", vfh.Create)
 	mux.HandleFunc("GET /virtual-folders/{id}", vfh.Get)
@@ -57,9 +52,6 @@ func NewRouter(s *store.Store, sc *scanner.Scanner, ext *extractor.Extractor, ll
 
 	mux.HandleFunc("GET /search", sh.Search)
 
-	mux.HandleFunc("POST /intelligence/files/{id}/tag", ih.TagFile)
-	mux.HandleFunc("POST /intelligence/files/tag", ih.TagFiles)
-	mux.HandleFunc("POST /intelligence/watched-directories/{id}/tag", ih.TagWatchedDir)
 	mux.HandleFunc("GET /intelligence/strategies", ih.ListStrategies)
 	mux.HandleFunc("GET /intelligence/folders/physical", ih.ListPhysicalFolders)
 	mux.HandleFunc("GET /intelligence/folders/physical/files", ih.ListPhysicalFolderFiles)
@@ -70,13 +62,7 @@ func NewRouter(s *store.Store, sc *scanner.Scanner, ext *extractor.Extractor, ll
 	mux.HandleFunc("DELETE /intelligence/folders/suggestions/{id}", ih.DismissFolderSuggestion)
 	mux.HandleFunc("POST /intelligence/folders/suggestions/refine-all", ih.RefineAllSuggestions)
 	mux.HandleFunc("GET /intelligence/folders/suggestions/status", ih.GetGenerationStatus)
-	mux.HandleFunc("GET /intelligence/tags", ih.ListTags)
-	mux.HandleFunc("POST /intelligence/tags", ih.CreateTag)
-	mux.HandleFunc("GET /intelligence/tags/{id}/files", ih.ListTagFiles)
-	mux.HandleFunc("DELETE /intelligence/tags/{id}", ih.DeleteTag)
-	mux.HandleFunc("POST /intelligence/tags/{id}/accept", ih.AcceptTag)
 	mux.HandleFunc("POST /intelligence/refine/folder/{id}", ih.RefineFolder)
-	mux.HandleFunc("POST /intelligence/refine/tag/{id}", ih.RefineTag)
 	mux.HandleFunc("GET /intelligence/files/unprocessed/count", ih.GetUnprocessedCount)
 	mux.HandleFunc("GET /intelligence/folders/guards", ih.ListFolderGuards)
 	mux.HandleFunc("PUT /intelligence/folders/guards", ih.SetFolderGuard)
