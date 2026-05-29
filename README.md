@@ -1,47 +1,54 @@
 # Owl File Manager
 
-A desktop application for automatic file and note management. Instead of manually organizing files and notes, the system analyzes your content and creates an intelligent interface to access everything structurally.
+A desktop application for automatic file organization. Instead of manually sorting files across Downloads, Desktop, and Documents, Owl analyzes your content and creates an intelligent interface to access everything structurally.
 
 ## Core Problem
 
-- Files get scattered across Downloads, Desktop, Documents, etc. and never get organized.
-- Notes apps require manual maintenance — you have to tag, folder, and sort everything yourself.
-- There's no easy way to connect related notes and files together.
+- Files get scattered across folders and never get organized.
+- Manual organization is tedious and never keeps up.
+- There's no easy way to find related files across different directories.
 
-## Design Direction: Notes as File Context
+## Design Direction
 
-Owl's identity is a **smart file manager** — not a notes app competing with Obsidian. Notes exist to annotate and enrich your files, not as their own universe.
+Owl is a **smart file manager** — not a search tool or a notes app. It understands your files' content, recognizes when files are related, and surfaces intelligent suggestions for grouping them. You stay in control: suggest, accept, dismiss, refine.
 
-**v1:** Notes are a feature of the file manager. Lightweight markdown editor. Notes attach to virtual folders and can be materialized into `.md` files on disk. Comments provide quick per-file annotations. You can browse all notes standalone, but the main entry is always through the file context.
+**v1 (current):** Smart file organization. Add watched directories, scan files, extract content, browse the real folder hierarchy, and generate intelligent grouping suggestions. Accept suggestions to create virtual folders, dismiss what doesn't fit, refine names with LLM help.
 
-**Future:** If notes usage grows, notes can split into their own workspace with dedicated features (backlinks, graph view, rich editor) while still sharing the same data model and Projects system. This lets Owl become "Obsidian with files" — a notes app that natively handles PDFs, images, docs alongside markdown.
+**v2 (planned):** Automation, media support, and richer organization tools. Real-time file watching, batch operations, image/audio/video metadata, drag-and-drop organization, materialization of virtual folders to disk, and project workspaces.
 
 ## Use Cases
 
 ### Smart File Organization
-You have PDFs, docs, images, etc. scattered across folders from past projects. Owl will:
-- Analyze your specified folders (Downloads, Documents, etc.)
-- Create searchable indexes based on file names and content
-- Auto-generate tags and categories (e.g., "all PDFs about birds")
-- Run in the background and watch selected folders for changes
-- Create **virtual folders** — groupings that only exist in the Owl UI, collecting related files from different locations into one place
+You have PDFs, documents, images, and installers scattered across Downloads and Desktop. Owl will:
+- Scan your watched directories and index every file
+- Extract text content from supported formats (PDF, DOCX, code, etc.)
+- Classify folders as coherent (well-organized — leave alone) or needing attention
+- Run analysis strategies on orphan files and suggest virtual folder groupings
+- Let you accept, dismiss, or refine suggestions with LLM-assisted naming
 
-**Example:** You've been researching birds in your area. You have some files on your Desktop, others in Downloads. Owl creates a virtual folder called "Bird Research" that shows everything in one view.
+**Example:** You've downloaded research papers, meeting notes, and installer files over months. Owl identifies groups like "Q4 Financial Reports," "Python Project Assets," and "Meeting Notes 2024" — without moving a single file on disk.
 
-### Intelligent Notes & Comments
-**Notes** are markdown documents attached to virtual folders — if you took notes about birds, they'll show up alongside your files when you open your Bird Research virtual folder. Notes can be **materialized** into actual `.md` files on disk.
-
-**Comments** are lightweight per-file annotations — quick context or reminders attached to individual files.
+### Intelligent Discovery
+- Browse your real filesystem tree directly in the UI, with file counts per folder
+- Search across filenames, extracted content, comments, and tags in one query
+- See coherence indicators on folders (are the files inside related or scattered?)
+- Review auto-generated suggestions and decide what to keep
 
 ## Core Concepts
 
-- **Virtual Folders** — Collections of related files from across your system, visible only in the Owl interface. No files are moved. If a user finds a virtual folder useful, they can **materialize** it — a real folder is created on disk and all the files are moved there. Auto-suggested folders appear alongside manually created ones for easy review.
-- **Tags** — Labels that mark files and notes by context or type. Auto-generated from content analysis, or manually created. Auto tags are reviewed before accepting.
-- **Comments** — Lightweight per-file annotations for quick context. One comment per file.
-- **Notes** — Markdown documents attached to virtual folders. Can be materialized into actual `.md` files on disk.
-- **Projects** *(v2)* — Workspaces combining multiple virtual folders and notes.
+- **Watched Directories** — Folders you tell Owl to monitor. Scanned manually, files recorded in the database.
+- **Physical Folder Tree** — The real filesystem hierarchy, displayed with file counts and coherence indicators.
+- **Content Extraction** — Text is extracted from supported file types and stored for search and analysis.
+- **Virtual Folders** — Collections of related files visible only in Owl. Created manually or auto-suggested. No files are moved on disk.
+- **Folder Guard** — LLM classifies folders as "related" (app/project files, skip) or "open" (random files, process). Prevents breaking up well-organized folders.
+- **Coherence Analysis** — Measures how similar files are within a folder. Coherent folders are left alone. Incoherent folders contribute files to the suggestion pool.
+- **Tags** — Labels marking files by context. Auto-generated from content, reviewed before accepting.
+- **Comments** — Lightweight per-file annotations for quick context.
+- **Strategies** — Two organization backends: `content_tfidf` (fast, TF-IDF + cosine similarity) and `embeddings` (semantic, LM Studio + DBSCAN).
 
 ## Stack
 
-- **Backend:** Go + SQLite (FTS5)
+- **Backend:** Go + SQLite (FTS5) + stdlib HTTP
 - **Frontend:** Tauri v2 + Preact + TypeScript
+- **LLM:** LM Studio (OpenAI-compatible) for folder guard + refinement
+- **Embeddings:** LM Studio `/v1/embeddings` for semantic strategy

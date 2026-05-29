@@ -1,123 +1,130 @@
-# Owl File Manager — Features & Functionality
+# Owl File Manager — Features
 
-## Overview
+## V1 (Current)
 
-Owl is a desktop file manager that helps users organize files on their local filesystem. It watches directories the user selects, indexes file content and metadata, and provides intelligent suggestions for organizing files into virtual folders. The backend is Go with SQLite, the frontend is Preact + TypeScript, and the desktop shell is Tauri v2.
+### Directory Management
+- Add/remove watched directories (e.g., `~/Downloads`, `~/Documents`)
+- Manual scan: records every file's path, name, extension, size, modification time
+- Scan per directory or globally
 
----
+### Content Extraction
+- Manual trigger per directory or per file
+- Supported formats: txt, md, pdf, docx, xlsx, pptx, csv, json, xml, yaml, html, css, scss, svg, code files (go, py, js, ts, rs, java, c, cpp, rb, php, sql, sh, bat, ps1) and more
+- Binary/unsupported files fall back to filename-based keyword extraction
+- Extracted text stored in FTS5 virtual tables for full-text search
 
-## Core Flow
+### Search
+- Unified search across 4 scopes: filenames, content, comments, tags
+- Scope toggle pills to narrow results
+- Ranked results with snippets and match-source badges
+- Click results to navigate directly to file detail
 
-### 1. Watch & Scan
-User adds directories to watch (e.g., `~/Downloads`, `~/Documents`). Owl scans them recursively, recording every file's path, name, extension, size, and modification time into SQLite. Scans are triggered manually via the Ingest page — Owl does not watch for filesystem changes in real-time.
+### Physical Folder Tree
+- Real filesystem hierarchy displayed in the UI
+- Expand/collapse with depth-based auto-expand
+- File counts per folder
+- Top-level files shown inline when expanding nodes
+- Coherence badges (coherent/incoherent) on folders
 
-### 2. Extract & Index
-After scanning, content extraction runs (also manual). Owl reads file content for supported formats (txt, md, pdf, docx, xlsx, pptx, json, xml, yaml, code files, etc.) and stores the text in an FTS5 virtual table for full-text search. File metadata (dimensions for images, page count for PDFs, etc.) is stored as JSON blobs.
+### LLM Folder Guard
+- Guards classify folders as "related" (files belong together — skip) or "open" (files are fair game — process)
+- BFS top-down traversal, LLM classifies each folder
+- Max depth of 3 — deeper folders auto-guarded
+- Parent context passed to LLM for better decisions
+- User can toggle guard status per folder (overrides LLM)
+- When a parent is guarded, stale descendant guards are cleaned up
 
-### 3. Search
-Unified search across filenames, extracted content, comments, tags, and notes. User types a query, selects which scopes to search via toggle pills, and gets ranked results with snippets.
+### Coherence Analysis
+- Per-folder TF-IDF vector computation
+- Average pairwise cosine similarity as coherence score
+- Threshold-based classification (coherent vs incoherent)
+- Outlier detection within coherent folders
+- Orphans collected from: root files, incoherent folder files, outliers
 
-### 4. Intelligent Organization
-This is Owl's core value. The system analyzes files and suggests how to organize them:
+### Virtual Folder Suggestions
+- Generation pipeline:
+  1. Build global TF-IDF corpus (content + filename fallback)
+  2. Run folder guard classification
+  3. Filter guarded folders
+  4. Analyze coherence on remaining folders
+  5. Collect orphans
+  6. Run strategy on orphans
+  7. Cluster, name suggestions, save to DB
+- Two strategies (configurable):
+  - **content_tfidf** (default): TF-IDF vectors + pairwise cosine similarity + flood-fill clustering. ~30s for 12K files.
+  - **embeddings**: LM Studio embedding vectors + DBSCAN clustering. ~20-40min for 12K first run, cached thereafter.
+- Suggestion naming uses top TF-IDF terms (LLM refinement on user click)
+- Generation runs async — status tracked in memory, pollable via API
+- Progress stages: initializing → classifying_folders → building_corpus → analyzing_coherence → clustering → saving → complete
 
-#### Tags
-Auto-generated labels for files based on content analysis. Tags have a source (`auto` or `manual`). Auto tags can be accepted (promoted to manual) or dismissed (deleted). LLM refinement evaluates auto tags for meaningfulness, renames vague ones, and adds descriptions.
+### Suggestion Lifecycle
+- **Accept** — promotes from `auto` to `manual` source
+- **Dismiss** — deletes the suggestion
+- **Refine** — LLM renames and adds description (per folder or bulk refine all)
+- Suggestions persist in the database across restarts
 
-**Status:** Needs redesign — currently produces too many generic tags. Deferred to v1.2.
+### Tags
+- Auto-generated from content analysis
+- Accept/dismiss flow (same as suggestions)
+- LLM refinement evaluates for specificity, renames vague tags, adds descriptions
+- Tags have `source` field: `auto` or `manual`
+- Tag files manually via file detail page
 
-#### Virtual Folders
-Collections of files that don't need to be in the same physical directory. Virtual folders can be created manually or suggested automatically. Auto-suggested folders go through the same accept/dismiss/refine flow as tags. Folders can be "materialized" — written to disk as real directories.
+### Comments
+- One lightweight text annotation per file
+- Create/edit/delete via file detail page
+- Included in search scope
 
----
+### Folder Guard UI
+- Folder tree shows guarded (🔒) and open (🔓) badges
+- Click badge to toggle guard status
+- User toggles saved as `source='user'`, always respected
 
-## Folder Intelligence (v1.1 — Current Focus)
+### Configuration
+- JSON config file at project root (`config.json`) or `~/.config/owl/config.json`
+- Environment variable overrides: `LLM_ENABLED`, `LLM_BASE_URL`, `LLM_MODEL`, `EMBED_MODEL`, `LOG_LEVEL`
+- Config options: LLM settings, embedding model, folder strategy selection
 
-### Problem
-A user watches `~/Downloads`. Inside there are:
-- Subfolders that are already well-organized (e.g., `animals/dogs/`, `animals/cats/`, `project-x/`) — these came from unzipped archives or intentional organization
-- Orphan files scattered in the root (e.g., `report_q1.pdf`, `report_q2.pdf`, `data.csv`) — these need grouping
-- Some subfolders that are incoherent (user dumped random files into a "stuff" folder)
-
-The old system clustered all files blindly, breaking apart already-related subfolder contents and creating useless suggestions.
-
-### New Approach
-
-#### Physical Folder Tree
-Owl discovers and displays the real filesystem folder hierarchy. For each watched directory, it queries all distinct `parent_dir` values from the files table and builds a tree. The UI shows this tree with expand/collapse, file counts, and coherence indicators.
-
-#### Coherence Analysis
-Each physical subfolder is analyzed for content coherence:
-- Compute TF-IDF vectors for all files in the folder
-- Calculate average pairwise cosine similarity
-- Folders with high similarity → coherent (shown green, left alone)
-- Folders with low similarity → incoherent (shown yellow/red, files become candidates)
-
-#### Orphan Collection
-Files that need organizational help:
-1. **Root orphans** — files directly in the watched directory root (not in any subfolder)
-2. **Incoherent subfolder files** — files in subfolders that failed coherence check
-3. **Outlier files** — individual files in otherwise-coherent folders that don't match the theme
-
-#### Typed Suggestions
-Instead of only "create new folder", the system generates three types:
-
-1. **`new_folder`** — A cluster of orphan files that are semantically related. "Create a 'Statistics USA' folder with these 8 PDFs."
-2. **`add_to_folder`** — An orphan file that matches an existing physical or virtual folder. "Add `report_q3.pdf` to the 'Statistics USA' folder."
-3. **`merge_folders`** — Two or more adjacent subfolders with very similar content. "Merge `dogs/` and `cats/` into a 'pets' folder."
-
-Each suggestion has a confidence score and can be accepted or dismissed.
-
----
-
-## Strategies
-
-Two folder suggestion strategies, selectable via config:
-
-### Content TF-IDF (default, fast)
-- Runs TF-IDF on extracted file content from the FTS table
-- Computes pairwise cosine similarity between TF-IDF vectors
-- Clusters using flood-fill on similarity edges
-- ~30 seconds for 12K files
-- Good for quick iterations
-
-### Embeddings (better quality, slower)
-- Generates vector embeddings via LM Studio's OpenAI-compatible API (`/v1/embeddings`)
-- Uses file name + extension + parent dir + first 2000 chars of content as input
-- Clusters using DBSCAN (pure Go implementation)
-- Caches embeddings in SQLite `file_embeddings` table (BLOB) for instant re-runs
-- ~20-40 minutes for 12K files (first run), instant on subsequent runs
-- Better at semantic similarity ("quarterly report" ≈ "financial summary")
-
----
-
-## Configuration
-
-```json
-{
-  "llm": {
-    "enabled": true,
-    "base_url": "http://localhost:1234/v1",
-    "model": "model-name",
-    "embed_model": "text-embedding-model",
-    "folder_strategy": "content_tfidf"
-  }
-}
-```
-
-Environment variable overrides: `LLM_ENABLED`, `LLM_BASE_URL`, `LLM_MODEL`, `EMBED_MODEL`
+### API
+- REST API on port 3721 (stdlib `http.ServeMux`)
+- 30+ endpoints covering files, directories, tags, virtual folders, search, intelligence
+- JSON responses throughout
 
 ---
 
-## Technology Stack
+## V2 (Planned)
 
-| Layer | Technology |
-|---|---|
-| Backend | Go 1.26, stdlib `http.ServeMux` |
-| Database | SQLite via `modernc.org/sqlite` (pure Go, no CGO) |
-| Migrations | `golang-migrate/v2` with `embed.FS` |
-| Frontend | Preact + Vite + TypeScript |
-| Desktop | Tauri v2 |
-| LLM | LM Studio (OpenAI-compatible API) |
-| Embeddings | LM Studio `/v1/embeddings` endpoint |
-| Clustering | DBSCAN (pure Go) |
-| Logging | `log/slog` + `tint` handler |
+### Dashboard
+- Proper dashboard page with stats, recent activity, quick actions
+
+### Automation
+- Real-time file watching via fsnotify — no manual scan needed
+- Auto-scan on startup
+- Background pipeline: scan → extract → tag → suggest
+- Batch operations: select multiple files, bulk tag/extract/delete
+
+### Media & Desktop
+- Image metadata extraction (EXIF, dimensions)
+- Audio/video metadata extraction
+- Thumbnail generation for images
+- OCR + AI vision for image content understanding
+- Tauri system tray integration, native file dialogs
+
+### Projects
+- Workspaces combining multiple virtual folders and notes
+- Project-level tags and search scoping
+
+### Smart Suggestions
+- `add_to_folder` type: suggest adding orphan files to existing coherent virtual folders
+- `merge_folders` type: suggest merging two similar sibling folders
+- UI drag-and-drop: drag file into folder (add), drag folder into folder (merge)
+
+### Tags (v1.2)
+- Redesign tags system: remove auto-tagging, move to manual only
+- Allow attaching notes to tags
+
+### Notes
+- Create/edit/delete notes (backend stub existed, removed in v1.1 cleanup)
+- Attach notes to virtual folders
+- Tag notes
+- Materialization: write notes as .md files on disk
