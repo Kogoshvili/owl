@@ -10,7 +10,6 @@ import {
   extractFile,
   getUnprocessedCount,
   getProcessingStats,
-  searchFiles,
   getFileDetail,
   upsertComment,
   deleteComment,
@@ -22,6 +21,7 @@ import {
   deleteSuggestion,
   addFilesToSuggestion,
   removeFileFromSuggestion,
+  acceptSuggestion,
   listPhysicalFolders,
   listFolderGuards,
   setFolderGuard,
@@ -33,7 +33,6 @@ import {
   listStrategies,
   runGuard,
   extractOrphans,
-  type SearchScope,
 } from "../api"
 import type { FileListFilterState } from "../api"
 
@@ -144,6 +143,19 @@ export function useProcessingStats() {
   return useQuery({
     queryKey: ["processingStats"],
     queryFn: getProcessingStats,
+  })
+}
+
+export function useAcceptSuggestion() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id, destination }: { id: number; destination?: string }) =>
+      acceptSuggestion(id, destination),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["suggestions"] })
+      qc.invalidateQueries({ queryKey: ["folderSuggestions"] })
+      qc.invalidateQueries({ queryKey: ["suggestion"] })
+    },
   })
 }
 
@@ -337,10 +349,4 @@ export function useDeleteComment() {
   })
 }
 
-export function useSearch(query: string, scopes: SearchScope[]) {
-  return useQuery({
-    queryKey: ["search", query, scopes],
-    queryFn: () => searchFiles(query, scopes),
-    enabled: query.length >= 2,
-  })
-}
+

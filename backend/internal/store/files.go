@@ -393,6 +393,29 @@ func (s *Store) GetFileContent(fileID int64) (string, error) {
 	return content, err
 }
 
+func (s *Store) UpsertFileFTS(fileID int64, name, extension, content string) error {
+	tx, err := s.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	_, err = tx.Exec(`DELETE FROM files_fts WHERE file_id = ?`, fileID)
+	if err != nil {
+		return err
+	}
+
+	_, err = tx.Exec(
+		`INSERT INTO files_fts (file_id, name, extension, content) VALUES (?, ?, ?, ?)`,
+		fileID, name, extension, content,
+	)
+	if err != nil {
+		return err
+	}
+
+	return tx.Commit()
+}
+
 func (s *Store) ListExtensions() ([]string, error) {
 	rows, err := s.db.Query(`SELECT DISTINCT extension FROM files WHERE extension != '' ORDER BY extension`)
 	if err != nil {

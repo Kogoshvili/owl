@@ -3,6 +3,8 @@ package handler
 import (
 	"encoding/json"
 	"net/http"
+	"os"
+	"path/filepath"
 
 	"owl/internal/store"
 )
@@ -152,4 +154,33 @@ func (h *SuggestionHandler) RemoveFile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
+}
+
+type materializeRequest struct {
+	Destination string `json:"destination"`
+}
+
+func (h *SuggestionHandler) Materialize(w http.ResponseWriter, r *http.Request) {
+	id, ok := parsePathID(w, r, "id")
+	if !ok {
+		return
+	}
+
+	var req materializeRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+	if req.Destination == "" {
+		home, _ := os.UserHomeDir()
+		req.Destination = filepath.Join(home, "Owl-organized")
+	}
+
+	result, err := h.store.MaterializeSuggestion(id, req.Destination)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	writeJSON(w, http.StatusOK, result)
 }

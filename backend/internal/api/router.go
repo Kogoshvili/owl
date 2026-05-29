@@ -18,7 +18,6 @@ func NewRouter(s *store.Store, sc *scanner.Scanner, ext *extractor.Extractor, ll
 	wdh := handler.NewWatchedDirHandler(s, sc, ext)
 	fh := handler.NewFileHandler(s, ext)
 	ch := handler.NewCommentHandler(s)
-	sh := handler.NewSearchHandler(s)
 	shh := handler.NewSuggestionHandler(s)
 	ih := handler.NewIntelligenceHandler(s, llmClient, ext, cfg)
 
@@ -48,8 +47,7 @@ func NewRouter(s *store.Store, sc *scanner.Scanner, ext *extractor.Extractor, ll
 	mux.HandleFunc("DELETE /suggestions/{id}", shh.Delete)
 	mux.HandleFunc("POST /suggestions/{id}/files", shh.AddFiles)
 	mux.HandleFunc("DELETE /suggestions/{id}/files/{fileId}", shh.RemoveFile)
-
-	mux.HandleFunc("GET /search", sh.Search)
+	mux.HandleFunc("POST /suggestions/{id}/materialize", shh.Materialize)
 
 	mux.HandleFunc("GET /intelligence/strategies", ih.ListStrategies)
 	mux.HandleFunc("GET /intelligence/folders/physical", ih.ListPhysicalFolders)

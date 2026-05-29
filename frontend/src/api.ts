@@ -163,6 +163,8 @@ export interface FolderSuggestion {
   description: string
   suggestion_type: string
   confidence: number
+  materialized_at: string | null
+  materialized_path: string
   created_at: string
 }
 
@@ -172,8 +174,25 @@ export interface FolderSuggestionDetail {
   description: string
   suggestion_type: string
   confidence: number
+  materialized_at: string | null
+  materialized_path: string
   created_at: string
   files: File[]
+}
+
+export interface MaterializeResult {
+  suggestion_id: number
+  folder_path: string
+  moved: number
+  failed: string[]
+}
+
+export function acceptSuggestion(id: number, destination?: string): Promise<MaterializeResult> {
+  return request<MaterializeResult>(`/suggestions/${id}/materialize`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ destination: destination || "" }),
+  })
 }
 
 export function listSuggestions(): Promise<FolderSuggestion[]> {
@@ -216,31 +235,6 @@ export function removeFileFromSuggestion(suggestionId: number, fileId: number): 
   return request<void>(`/suggestions/${suggestionId}/files/${fileId}`, { method: "DELETE" })
 }
 
-export interface SearchFileResult {
-  file_id: number
-  name: string
-  path: string
-  extension: string
-  rank: number
-  snippet: string
-  match_sources: string[]
-}
-
-export interface SearchResults {
-  files: SearchFileResult[]
-}
-
-export const ALL_SCOPES = ["filenames", "content", "comments"] as const
-export type SearchScope = typeof ALL_SCOPES[number]
-
-export function searchFiles(query: string, scopes?: SearchScope[]): Promise<SearchResults> {
-  const params = new URLSearchParams({ q: query })
-  if (scopes && scopes.length < ALL_SCOPES.length) {
-    params.set("scopes", scopes.join(","))
-  }
-  return request<SearchResults>(`/search?${params}`)
-}
-
 export interface TagWithCount {
   id: number
   name: string
@@ -255,6 +249,8 @@ export interface FolderSuggestionDisplay {
   description: string
   suggestion_type: string
   confidence: number
+  materialized_at: string | null
+  materialized_path: string
   file_count: number
   preview: string[]
   created_at: string

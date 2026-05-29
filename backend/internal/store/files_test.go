@@ -62,6 +62,8 @@ func openTestDB(t *testing.T) *sql.DB {
 		description TEXT NOT NULL DEFAULT '',
 		suggestion_type TEXT NOT NULL DEFAULT 'new_folder',
 		confidence REAL NOT NULL DEFAULT 0,
+		materialized_at DATETIME,
+		materialized_path TEXT NOT NULL DEFAULT '',
 		created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
 	);
 	CREATE TABLE IF NOT EXISTS folder_suggestion_files (
@@ -276,40 +278,6 @@ func TestStore_FolderGuard(t *testing.T) {
 		require.NoError(t, err)
 		guarded, _, _ := s.GetFolderGuard("/test/path")
 		require.False(t, guarded)
-	})
-}
-
-func TestStore_Search(t *testing.T) {
-	db := openTestDB(t)
-	s := New(db)
-
-	wdID := insertWatchedDir(t, db, "/search")
-	fID := insertFile(t, db, struct {
-		path, name, ext, parentDir string
-		watchedDirID               int64
-		processingStatus           string
-	}{"/search/report.txt", "report.txt", ".txt", "/search", wdID, "unprocessed"})
-
-	// Insert FTS content
-	err := s.UpsertFileFTS(fID, "report.txt", ".txt", "quarterly financial report")
-	require.NoError(t, err)
-
-	t.Run("search by filename", func(t *testing.T) {
-		results, err := s.Search("report", "filenames", 10)
-		require.NoError(t, err)
-		require.NotEmpty(t, results.Files)
-	})
-
-	t.Run("search by content", func(t *testing.T) {
-		results, err := s.Search("quarterly", "content", 10)
-		require.NoError(t, err)
-		require.NotEmpty(t, results.Files)
-	})
-
-	t.Run("search no results", func(t *testing.T) {
-		results, err := s.Search("zzz_nonexistent", "filenames", 10)
-		require.NoError(t, err)
-		require.Empty(t, results.Files)
 	})
 }
 

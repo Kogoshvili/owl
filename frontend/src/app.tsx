@@ -1,7 +1,6 @@
 import { Router, Route } from "preact-router"
 import { route } from "preact-router"
 import { HomePage } from "./pages/home"
-import { SearchPage } from "./pages/search"
 import { FileDetailPage } from "./pages/file-detail"
 import { SuggestionsPage } from "./pages/suggestions"
 import { SuggestionDetailPage } from "./pages/suggestion-detail"
@@ -27,7 +26,6 @@ export function App() {
           <a href="/" class="logo" onClick={(e) => { e.preventDefault(); route("/") }}>Owl File Manager</a>
           <nav class="nav">
             <NavLink href="/">Files</NavLink>
-            <NavLink href="/search">Search</NavLink>
             <NavLink href="/suggestions">Suggestions</NavLink>
           </nav>
         </div>
@@ -36,7 +34,6 @@ export function App() {
         <Router>
           <Route path="/" component={HomePage} />
           <Route path="/files/:id" component={FileDetailPage} />
-          <Route path="/search" component={SearchPage} />
           <Route path="/suggestions" component={SuggestionsPage} />
           <Route path="/suggestions/:id" component={SuggestionDetailPage} />
         </Router>
