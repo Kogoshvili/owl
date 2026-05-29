@@ -1,4 +1,0 @@
-DROP TABLE IF EXISTS notes_fts;
-DROP TABLE IF EXISTS note_virtual_folders;
-DROP TABLE IF EXISTS note_tags;
-DROP TABLE IF EXISTS notes;

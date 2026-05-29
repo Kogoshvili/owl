@@ -1,1 +1,0 @@
-ALTER TABLE tags ADD COLUMN description TEXT NOT NULL DEFAULT '';

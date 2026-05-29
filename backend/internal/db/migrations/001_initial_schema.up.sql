@@ -1,7 +1,6 @@
 CREATE TABLE IF NOT EXISTS watched_directories (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     path TEXT NOT NULL UNIQUE,
-    recursive INTEGER NOT NULL DEFAULT 1,
     enabled INTEGER NOT NULL DEFAULT 1,
     last_scanned_at DATETIME,
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
@@ -15,15 +14,21 @@ CREATE TABLE IF NOT EXISTS files (
     mime_type TEXT NOT NULL DEFAULT '',
     size INTEGER NOT NULL DEFAULT 0,
     parent_dir TEXT NOT NULL,
+    watched_dir_id INTEGER REFERENCES watched_directories(id) ON DELETE CASCADE,
     status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'missing', 'deleted')),
     modified_at DATETIME NOT NULL,
-    indexed_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    content_indexed_at DATETIME
+    indexed_at DATETIME,
+    content_indexed_at DATETIME,
+    processing_status TEXT NOT NULL DEFAULT 'unprocessed' CHECK (processing_status IN ('unprocessed', 'queued', 'processing', 'processed', 'stale', 'failed')),
+    processing_error TEXT,
+    file_metadata TEXT
 );
 
 CREATE INDEX IF NOT EXISTS idx_files_parent_dir ON files(parent_dir);
 CREATE INDEX IF NOT EXISTS idx_files_status ON files(status);
 CREATE INDEX IF NOT EXISTS idx_files_extension ON files(extension);
+CREATE INDEX IF NOT EXISTS idx_files_watched_dir_id ON files(watched_dir_id);
+CREATE INDEX IF NOT EXISTS idx_files_processing_status ON files(processing_status);
 
 CREATE TABLE IF NOT EXISTS comments (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -33,70 +38,46 @@ CREATE TABLE IF NOT EXISTS comments (
     updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE TABLE IF NOT EXISTS tags (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    name TEXT NOT NULL UNIQUE,
-    source TEXT NOT NULL DEFAULT 'auto' CHECK (source IN ('auto', 'manual')),
-    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
-);
-
-CREATE TABLE IF NOT EXISTS file_tags (
+CREATE TABLE IF NOT EXISTS file_embeddings (
     file_id INTEGER NOT NULL REFERENCES files(id) ON DELETE CASCADE,
-    tag_id INTEGER NOT NULL REFERENCES tags(id) ON DELETE CASCADE,
-    source TEXT NOT NULL DEFAULT 'auto' CHECK (source IN ('auto', 'manual')),
-    PRIMARY KEY (file_id, tag_id)
+    model TEXT NOT NULL,
+    embedding BLOB NOT NULL,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (file_id, model)
 );
 
-CREATE TABLE IF NOT EXISTS note_tags (
-    note_id INTEGER NOT NULL REFERENCES notes(id) ON DELETE CASCADE,
-    tag_id INTEGER NOT NULL REFERENCES tags(id) ON DELETE CASCADE,
-    source TEXT NOT NULL DEFAULT 'auto' CHECK (source IN ('auto', 'manual')),
-    PRIMARY KEY (note_id, tag_id)
+CREATE TABLE IF NOT EXISTS folder_guard_classifications (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    path TEXT NOT NULL UNIQUE,
+    guarded INTEGER NOT NULL DEFAULT 0,
+    reason TEXT NOT NULL DEFAULT '',
+    source TEXT NOT NULL DEFAULT 'llm' CHECK (source IN ('llm', 'user')),
+    classified_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE TABLE IF NOT EXISTS virtual_folders (
+CREATE UNIQUE INDEX IF NOT EXISTS idx_folder_guard_path ON folder_guard_classifications(path);
+CREATE INDEX IF NOT EXISTS idx_folder_guard_guarded ON folder_guard_classifications(guarded);
+CREATE INDEX IF NOT EXISTS idx_folder_guard_source ON folder_guard_classifications(source);
+
+CREATE TABLE IF NOT EXISTS folder_suggestions (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT NOT NULL,
     description TEXT NOT NULL DEFAULT '',
-    auto_generated INTEGER NOT NULL DEFAULT 0,
-    materialized INTEGER NOT NULL DEFAULT 0,
-    materialized_path TEXT,
+    suggestion_type TEXT NOT NULL DEFAULT 'new_folder',
+    confidence REAL NOT NULL DEFAULT 0,
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE TABLE IF NOT EXISTS virtual_folder_files (
-    virtual_folder_id INTEGER NOT NULL REFERENCES virtual_folders(id) ON DELETE CASCADE,
+CREATE TABLE IF NOT EXISTS folder_suggestion_files (
+    folder_suggestion_id INTEGER NOT NULL REFERENCES folder_suggestions(id) ON DELETE CASCADE,
     file_id INTEGER NOT NULL REFERENCES files(id) ON DELETE CASCADE,
-    source TEXT NOT NULL DEFAULT 'auto' CHECK (source IN ('auto', 'manual')),
     added_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    PRIMARY KEY (virtual_folder_id, file_id)
-);
-
-CREATE TABLE IF NOT EXISTS notes (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    title TEXT NOT NULL,
-    content TEXT NOT NULL DEFAULT '',
-    materialized INTEGER NOT NULL DEFAULT 0,
-    materialized_path TEXT,
-    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
-);
-
-CREATE TABLE IF NOT EXISTS note_virtual_folders (
-    note_id INTEGER NOT NULL REFERENCES notes(id) ON DELETE CASCADE,
-    virtual_folder_id INTEGER NOT NULL REFERENCES virtual_folders(id) ON DELETE CASCADE,
-    PRIMARY KEY (note_id, virtual_folder_id)
+    PRIMARY KEY (folder_suggestion_id, file_id)
 );
 
 CREATE VIRTUAL TABLE IF NOT EXISTS files_fts USING fts5(
     file_id UNINDEXED,
     name,
     extension,
-    content
-);
-
-CREATE VIRTUAL TABLE IF NOT EXISTS notes_fts USING fts5(
-    note_id UNINDEXED,
-    title,
     content
 );
