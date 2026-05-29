@@ -9,28 +9,30 @@ import {
   extractDir,
   extractFile,
   getUnprocessedCount,
+  getProcessingStats,
   searchFiles,
   getFileDetail,
   upsertComment,
   deleteComment,
   getFileExtensions,
-  getVirtualFolders,
-  getVirtualFolderDetail,
-  createVirtualFolder,
-  updateVirtualFolder,
-  deleteVirtualFolder,
-  addFilesToFolder,
-  removeFileFromFolder,
+  listSuggestions,
+  getSuggestionDetail,
+  createSuggestion,
+  updateSuggestion,
+  deleteSuggestion,
+  addFilesToSuggestion,
+  removeFileFromSuggestion,
   listPhysicalFolders,
   listFolderGuards,
   setFolderGuard,
   listFolderSuggestions,
-  generateFolderSuggestions,
-  acceptFolderSuggestion,
-  dismissFolderSuggestion,
-  refineFolder,
-  refineAllFolderSuggestions,
+  generateSuggestions,
+  dismissSuggestion,
+  refineSuggestion,
+  refineAllSuggestions,
   listStrategies,
+  runGuard,
+  extractOrphans,
   type SearchScope,
 } from "../api"
 import type { FileListFilterState } from "../api"
@@ -138,27 +140,34 @@ export function useUnprocessedCount() {
   })
 }
 
-export function useRefineFolder() {
+export function useProcessingStats() {
+  return useQuery({
+    queryKey: ["processingStats"],
+    queryFn: getProcessingStats,
+  })
+}
+
+export function useRefineSuggestion() {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: (id: number) => refineFolder(id),
-    onSuccess: (_data, id) => {
+    mutationFn: (id: number) => refineSuggestion(id),
+    onSuccess: () => {
       setTimeout(() => {
-        qc.invalidateQueries({ queryKey: ["virtualFolders"] })
-        qc.invalidateQueries({ queryKey: ["virtualFolder", id] })
+        qc.invalidateQueries({ queryKey: ["suggestions"] })
+        qc.invalidateQueries({ queryKey: ["suggestion", id] })
       }, 3000)
     },
   })
 }
 
-export function useRefineAllFolderSuggestions() {
+export function useRefineAllSuggestions() {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: () => refineAllFolderSuggestions(),
+    mutationFn: () => refineAllSuggestions(),
     onSuccess: () => {
       setTimeout(() => {
         qc.invalidateQueries({ queryKey: ["folderSuggestions"] })
-        qc.invalidateQueries({ queryKey: ["virtualFolders"] })
+        qc.invalidateQueries({ queryKey: ["suggestions"] })
       }, 3000)
     },
   })
@@ -183,68 +192,68 @@ export function useSetFolderGuard() {
   })
 }
 
-export function useVirtualFolders(source?: string) {
+export function useSuggestions() {
   return useQuery({
-    queryKey: ["virtualFolders", source],
-    queryFn: () => getVirtualFolders(source),
+    queryKey: ["suggestions"],
+    queryFn: listSuggestions,
   })
 }
 
-export function useCreateVirtualFolder() {
+export function useCreateSuggestion() {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: ({ name, description }: { name: string; description: string }) =>
-      createVirtualFolder(name, description),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["virtualFolders"] }),
+      createSuggestion(name, description),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["suggestions"] }),
   })
 }
 
-export function useUpdateVirtualFolder() {
+export function useUpdateSuggestion() {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: ({ id, name, description }: { id: number; name?: string; description?: string }) =>
-      updateVirtualFolder(id, name, description),
+      updateSuggestion(id, name, description),
     onSuccess: (_data, { id }) => {
-      qc.invalidateQueries({ queryKey: ["virtualFolders"] })
-      qc.invalidateQueries({ queryKey: ["virtualFolder", id] })
+      qc.invalidateQueries({ queryKey: ["suggestions"] })
+      qc.invalidateQueries({ queryKey: ["suggestion", id] })
     },
   })
 }
 
-export function useDeleteVirtualFolder() {
+export function useDeleteSuggestion() {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: (id: number) => deleteVirtualFolder(id),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["virtualFolders"] }),
+    mutationFn: (id: number) => deleteSuggestion(id),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["suggestions"] }),
   })
 }
 
-export function useVirtualFolderDetail(id: number | null) {
+export function useSuggestionDetail(id: number | null) {
   return useQuery({
-    queryKey: ["virtualFolder", id],
-    queryFn: () => getVirtualFolderDetail(id!),
+    queryKey: ["suggestion", id],
+    queryFn: () => getSuggestionDetail(id!),
     enabled: id !== null,
   })
 }
 
-export function useAddFilesToFolder() {
+export function useAddFilesToSuggestion() {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: ({ folderId, fileIds, source }: { folderId: number; fileIds: number[]; source: string }) =>
-      addFilesToFolder(folderId, fileIds, source),
-    onSuccess: (_data, { folderId }) => {
-      qc.invalidateQueries({ queryKey: ["virtualFolder", folderId] })
+    mutationFn: ({ suggestionId, fileIds }: { suggestionId: number; fileIds: number[] }) =>
+      addFilesToSuggestion(suggestionId, fileIds),
+    onSuccess: (_data, { suggestionId }) => {
+      qc.invalidateQueries({ queryKey: ["suggestion", suggestionId] })
     },
   })
 }
 
-export function useRemoveFileFromFolder() {
+export function useRemoveFileFromSuggestion() {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: ({ folderId, fileId }: { folderId: number; fileId: number }) =>
-      removeFileFromFolder(folderId, fileId),
-    onSuccess: (_data, { folderId }) => {
-      qc.invalidateQueries({ queryKey: ["virtualFolder", folderId] })
+    mutationFn: ({ suggestionId, fileId }: { suggestionId: number; fileId: number }) =>
+      removeFileFromSuggestion(suggestionId, fileId),
+    onSuccess: (_data, { suggestionId }) => {
+      qc.invalidateQueries({ queryKey: ["suggestion", suggestionId] })
     },
   })
 }
@@ -256,34 +265,46 @@ export function useFolderSuggestions() {
   })
 }
 
-export function useGenerateFolderSuggestions() {
+export function useGenerateSuggestions() {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: (params?: Parameters<typeof generateFolderSuggestions>[0]) =>
-      generateFolderSuggestions(params),
+    mutationFn: (params?: Parameters<typeof generateSuggestions>[0]) =>
+      generateSuggestions(params),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["folderSuggestions"] })
-      qc.invalidateQueries({ queryKey: ["virtualFolders"] })
+      qc.invalidateQueries({ queryKey: ["suggestions"] })
     },
   })
 }
 
-export function useAcceptFolderSuggestion() {
+export function useDismissSuggestion() {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: (id: number) => acceptFolderSuggestion(id),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["folderSuggestions"] })
-      qc.invalidateQueries({ queryKey: ["virtualFolders"] })
-    },
-  })
-}
-
-export function useDismissFolderSuggestion() {
-  const qc = useQueryClient()
-  return useMutation({
-    mutationFn: (id: number) => dismissFolderSuggestion(id),
+    mutationFn: (id: number) => dismissSuggestion(id),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["folderSuggestions"] }),
+  })
+}
+
+export function useRunGuard() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: () => runGuard(),
+    onSuccess: () => {
+      setTimeout(() => {
+        qc.invalidateQueries({ queryKey: ["folderGuards"] })
+        qc.invalidateQueries({ queryKey: ["physicalFolders"] })
+      }, 5000)
+    },
+  })
+}
+
+export function useExtractOrphans() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: () => extractOrphans(),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["unprocessedCount"] })
+    },
   })
 }
 

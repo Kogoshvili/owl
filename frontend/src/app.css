@@ -887,127 +887,132 @@ tbody tr:hover {
   border-color: var(--text);
 }
 
-/* Virtual Folders */
-.virtual-folders {
-  max-width: 700px;
-}
-
-.virtual-folders h2 {
-  margin: 0 0 16px;
-}
-
-.add-folder-form {
-  display: flex;
-  gap: 8px;
-  margin-bottom: 12px;
-}
-
-.add-folder-form input {
-  padding: 6px 10px;
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  background: transparent;
-  color: var(--text-h);
-  font-size: 0.85rem;
-  outline: none;
-}
-
-.add-folder-form input:focus {
-  border-color: var(--text);
-}
-
-.add-folder-form input:first-child {
-  width: 200px;
-}
-
-.add-folder-form input:nth-child(2) {
-  flex: 1;
-}
-
-.folder-list {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.folder-card {
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  padding: 12px 16px;
-  cursor: pointer;
-  transition: border-color 0.15s;
-}
-
-.folder-card:hover {
-  border-color: var(--text);
-}
-
-.folder-card-header {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.folder-name {
-  font-weight: 600;
-  color: var(--text-h);
-}
-
-.folder-desc {
-  color: var(--text);
-  font-size: 0.82rem;
-  margin: 4px 0 0;
-  opacity: 0.8;
-}
-
-.folder-card-meta {
-  margin-top: 4px;
-  font-size: 0.75rem;
-  color: var(--text);
-  opacity: 0.6;
-}
-
-.folder-card-actions {
-  display: flex;
-  gap: 6px;
-  margin-top: 8px;
-}
-
-.folder-edit {
-  display: flex;
-  gap: 8px;
-  align-items: center;
-  flex-wrap: wrap;
-}
-
-.folder-edit input {
-  padding: 4px 8px;
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  background: transparent;
-  color: var(--text-h);
-  font-size: 0.85rem;
-  outline: none;
-}
-
-.folder-edit input:first-child {
-  width: 200px;
-}
-
-.badge-auto {
-  background: #6366f1;
-  color: #fff;
-}
-
+/* Suggestions */
 .badge-confidence {
   background: #8b5cf6;
   color: #fff;
   font-size: 0.7rem;
 }
 
-.badge-materialized {
-  background: #059669;
-  color: #fff;
+.suggestions-page {
+}
+
+.suggestions-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+  flex-wrap: wrap;
+}
+
+.suggestions-header h2 {
+  margin: 0;
+}
+
+.suggestions-actions {
+  display: flex;
+  gap: 6px;
+  margin-left: auto;
+}
+
+.suggestion-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.suggestion-card {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 12px 14px;
+  transition: border-color 0.15s;
+  cursor: pointer;
+}
+
+.suggestion-card:hover {
+  border-color: var(--text);
+}
+
+.suggestion-card-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+.suggestion-name {
+  font-weight: 600;
+  color: var(--text-h);
+}
+
+.suggestion-desc {
+  color: var(--text);
+  font-size: 0.82rem;
+  opacity: 0.8;
+  margin-bottom: 4px;
+}
+
+.suggestion-meta {
+  color: var(--text);
+  font-size: 0.75rem;
+  opacity: 0.6;
+  margin-bottom: 6px;
+}
+
+.suggestion-preview {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-bottom: 8px;
+}
+
+.suggestion-preview-file {
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--border) 60%, transparent);
+  font-size: 0.72rem;
+  color: var(--text);
+  max-width: 160px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.suggestion-preview-more {
+  font-size: 0.72rem;
+  color: var(--text);
+  opacity: 0.6;
+  align-self: center;
+}
+
+.suggestion-actions {
+  display: flex;
+  gap: 6px;
+}
+
+/* Files Pipeline Bar */
+.files-pipeline-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 12px;
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.pipeline-actions {
+  display: flex;
+  gap: 6px;
+}
+
+.pipeline-status {
+  margin-left: auto;
+  display: flex;
+  gap: 6px;
+  font-size: 0.82rem;
+  color: var(--text);
+  opacity: 0.8;
 }
 
 /* Folder Detail Page */
@@ -1436,137 +1441,6 @@ tbody tr:hover {
   text-transform: uppercase;
   opacity: 0.6;
   margin-left: 2px;
-}
-
-/* Folder Suggestions */
-.vf-page-layout {
-  display: flex;
-  height: 100%;
-  overflow: hidden;
-  padding: 0;
-}
-
-.vf-page-main {
-  flex: 1;
-  overflow-y: auto;
-  padding: 16px;
-}
-
-.vf-page-sidebar {
-  width: 360px;
-  flex-shrink: 0;
-  border-left: 1px solid var(--border);
-  overflow-y: auto;
-  padding: 16px;
-}
-
-.folder-suggestions h2 {
-  margin: 0 0 12px;
-}
-
-.folder-suggestions-header {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-bottom: 12px;
-  flex-wrap: wrap;
-}
-
-.folder-suggestions-header h2 {
-  margin: 0;
-}
-
-.folder-suggestions-actions {
-  display: flex;
-  gap: 6px;
-  margin-left: auto;
-}
-
-.suggestion-list {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.suggestion-card {
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  padding: 12px 14px;
-  transition: border-color 0.15s;
-  cursor: pointer;
-}
-
-.suggestion-card:hover {
-  border-color: var(--text);
-}
-
-.suggestion-card-header {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-bottom: 4px;
-}
-
-.suggestion-name {
-  font-weight: 600;
-  color: var(--text-h);
-}
-
-.suggestion-desc {
-  color: var(--text);
-  font-size: 0.82rem;
-  opacity: 0.8;
-  margin-bottom: 4px;
-}
-
-.suggestion-meta {
-  color: var(--text);
-  font-size: 0.75rem;
-  opacity: 0.6;
-  margin-bottom: 6px;
-}
-
-.suggestion-preview {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px;
-  margin-bottom: 8px;
-}
-
-.suggestion-preview-file {
-  padding: 1px 6px;
-  border-radius: 4px;
-  background: color-mix(in srgb, var(--border) 60%, transparent);
-  font-size: 0.72rem;
-  color: var(--text);
-  max-width: 160px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.suggestion-preview-more {
-  font-size: 0.72rem;
-  color: var(--text);
-  opacity: 0.6;
-  align-self: center;
-}
-
-.suggestion-actions {
-  display: flex;
-  gap: 6px;
-}
-
-@media (max-width: 900px) {
-  .vf-page-layout {
-    flex-direction: column;
-  }
-  .vf-page-sidebar {
-    width: 100%;
-    border-left: none;
-    border-top: 1px solid var(--border);
-    max-height: 50vh;
-  }
 }
 
 /* Tag Suggestions Sidebar */

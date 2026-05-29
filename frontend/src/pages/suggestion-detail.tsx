@@ -1,8 +1,8 @@
 import { useState } from "preact/hooks"
-import { useVirtualFolderDetail, useRemoveFileFromFolder, useUpdateVirtualFolder, useDeleteVirtualFolder, useAddFilesToFolder, useRefineFolder } from "../hooks/queries"
+import { useSuggestionDetail, useRemoveFileFromSuggestion, useUpdateSuggestion, useDeleteSuggestion, useAddFilesToSuggestion, useRefineSuggestion } from "../hooks/queries"
 import { FilePickerDialog } from "../components/file-picker-dialog"
 import { route } from "preact-router"
-import type { VirtualFolder } from "../api"
+import type { FolderSuggestion } from "../api"
 
 function formatBytes(bytes: number): string {
   if (bytes === 0) return "0 B"
@@ -12,30 +12,21 @@ function formatBytes(bytes: number): string {
   return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + " " + sizes[i]
 }
 
-function FolderHeader({ folder, updateMutation, deleteMutation, refineMutation }: {
-  folder: VirtualFolder
-  updateMutation: ReturnType<typeof useUpdateVirtualFolder>
-  deleteMutation: ReturnType<typeof useDeleteVirtualFolder>
-  refineMutation: ReturnType<typeof useRefineFolder>
+function SuggestionHeader({ suggestion, updateMutation, deleteMutation, refineMutation }: {
+  suggestion: FolderSuggestion
+  updateMutation: ReturnType<typeof useUpdateSuggestion>
+  deleteMutation: ReturnType<typeof useDeleteSuggestion>
+  refineMutation: ReturnType<typeof useRefineSuggestion>
 }) {
   const [editing, setEditing] = useState(false)
-  const [name, setName] = useState(folder.name)
-  const [desc, setDesc] = useState(folder.description)
+  const [name, setName] = useState(suggestion.name)
+  const [desc, setDesc] = useState(suggestion.description)
   const [error, setError] = useState("")
 
   const handleSave = async () => {
     try {
-      await updateMutation.mutateAsync({ id: folder.id, name: name.trim() || undefined, description: desc.trim() || undefined })
+      await updateMutation.mutateAsync({ id: suggestion.id, name: name.trim() || undefined, description: desc.trim() || undefined })
       setEditing(false)
-    } catch (e: any) {
-      setError(e.message)
-    }
-  }
-
-  const handleDelete = async () => {
-    try {
-      await deleteMutation.mutateAsync(folder.id)
-      route("/virtual-folders")
     } catch (e: any) {
       setError(e.message)
     }
@@ -43,8 +34,8 @@ function FolderHeader({ folder, updateMutation, deleteMutation, refineMutation }
 
   const handleDismiss = async () => {
     try {
-      await deleteMutation.mutateAsync(folder.id)
-      route("/virtual-folders")
+      await deleteMutation.mutateAsync(suggestion.id)
+      route("/suggestions")
     } catch (e: any) {
       setError(e.message)
     }
@@ -52,13 +43,11 @@ function FolderHeader({ folder, updateMutation, deleteMutation, refineMutation }
 
   const handleRefine = async () => {
     try {
-      await refineMutation.mutateAsync(folder.id)
+      await refineMutation.mutateAsync(suggestion.id)
     } catch (e: any) {
       setError(e.message)
     }
   }
-
-  const isAuto = folder.source === "auto"
 
   if (editing) {
     return (
@@ -77,54 +66,46 @@ function FolderHeader({ folder, updateMutation, deleteMutation, refineMutation }
   return (
     <div class="folder-detail-header">
       <div class="folder-detail-title-row">
-        <h2>{folder.name}</h2>
-        <span class={`badge ${isAuto ? "badge-auto" : "badge-manual"}`}>{folder.source}</span>
-        {folder.materialized && <span class="badge badge-materialized">materialized</span>}
+        <h2>{suggestion.name}</h2>
       </div>
-      {folder.description && <p class="folder-detail-desc">{folder.description}</p>}
-       <div class="folder-header-actions">
-         <button class="btn btn-sm" onClick={() => setEditing(true)}>Edit</button>
-         {isAuto && (
-           <>
-             <button class="btn btn-sm btn-primary" onClick={handleRefine} disabled={refineMutation.isPending}>
-               {refineMutation.isPending ? "Refining..." : "Refine"}
-             </button>
-             <button class="btn btn-sm btn-danger" onClick={handleDismiss} disabled={deleteMutation.isPending}>
-               Dismiss
-             </button>
-           </>
-         )}
-         {!isAuto && (
-           <button class="btn btn-sm btn-danger" onClick={handleDelete} disabled={deleteMutation.isPending}>
-             Delete
-           </button>
-         )}
-       </div>
+      {suggestion.description && <p class="folder-detail-desc">{suggestion.description}</p>}
+      {suggestion.confidence > 0 && (
+        <span class="badge badge-confidence">{Math.round(suggestion.confidence * 100)}%</span>
+      )}
+      <div class="folder-header-actions">
+        <button class="btn btn-sm" onClick={() => setEditing(true)}>Edit</button>
+        <button class="btn btn-sm btn-primary" onClick={handleRefine} disabled={refineMutation.isPending}>
+          {refineMutation.isPending ? "Refining..." : "Refine"}
+        </button>
+        <button class="btn btn-sm btn-danger" onClick={handleDismiss} disabled={deleteMutation.isPending}>
+          Dismiss
+        </button>
+      </div>
     </div>
   )
 }
 
-export function VirtualFolderDetailPage({ id }: { id: string }) {
-  const folderId = parseInt(id, 10)
-  const detailQuery = useVirtualFolderDetail(isNaN(folderId) ? null : folderId)
-  const removeMutation = useRemoveFileFromFolder()
-  const updateMutation = useUpdateVirtualFolder()
-  const deleteMutation = useDeleteVirtualFolder()
-  const addFilesMutation = useAddFilesToFolder()
-  const refineMutation = useRefineFolder()
+export function SuggestionDetailPage({ id }: { id: string }) {
+  const suggestionId = parseInt(id, 10)
+  const detailQuery = useSuggestionDetail(isNaN(suggestionId) ? null : suggestionId)
+  const removeMutation = useRemoveFileFromSuggestion()
+  const updateMutation = useUpdateSuggestion()
+  const deleteMutation = useDeleteSuggestion()
+  const addFilesMutation = useAddFilesToSuggestion()
+  const refineMutation = useRefineSuggestion()
   const [pickerOpen, setPickerOpen] = useState(false)
 
-  if (isNaN(folderId)) return <div class="page"><div class="error-msg">Invalid folder ID</div></div>
+  if (isNaN(suggestionId)) return <div class="page"><div class="error-msg">Invalid suggestion ID</div></div>
   if (detailQuery.isLoading) return <div class="page"><div class="empty">Loading...</div></div>
-  if (!detailQuery.data) return <div class="page"><div class="empty">Folder not found</div></div>
+  if (!detailQuery.data) return <div class="page"><div class="empty">Suggestion not found</div></div>
 
-  const folder = detailQuery.data
-  const files = folder.files ?? []
+  const suggestion = detailQuery.data
+  const files = suggestion.files ?? []
   const existingFileIds = new Set(files.map((f) => f.id))
 
   const handleRemoveFile = async (fileId: number) => {
     try {
-      await removeMutation.mutateAsync({ folderId, fileId })
+      await removeMutation.mutateAsync({ suggestionId, fileId })
     } catch (e: any) {
       console.error(e)
     }
@@ -132,7 +113,7 @@ export function VirtualFolderDetailPage({ id }: { id: string }) {
 
   const handleAddFiles = async (fileIds: number[]) => {
     try {
-      await addFilesMutation.mutateAsync({ folderId, fileIds, source: "manual" })
+      await addFilesMutation.mutateAsync({ suggestionId, fileIds })
       setPickerOpen(false)
     } catch (e: any) {
       console.error(e)
@@ -141,9 +122,9 @@ export function VirtualFolderDetailPage({ id }: { id: string }) {
 
   return (
     <div class="page folder-detail-page">
-      <button class="btn btn-back" onClick={() => route("/virtual-folders")}>&larr; Back</button>
+      <button class="btn btn-back" onClick={() => route("/suggestions")}>&larr; Back</button>
 
-      <FolderHeader folder={folder} updateMutation={updateMutation} deleteMutation={deleteMutation} refineMutation={refineMutation} />
+      <SuggestionHeader suggestion={suggestion} updateMutation={updateMutation} deleteMutation={deleteMutation} refineMutation={refineMutation} />
 
       <div class="folder-section">
         <div class="folder-section-header">
@@ -152,7 +133,7 @@ export function VirtualFolderDetailPage({ id }: { id: string }) {
         </div>
 
         {files.length === 0 ? (
-          <div class="empty">No files in this folder</div>
+          <div class="empty">No files in this suggestion</div>
         ) : (
           <table class="folder-files-table">
             <thead>

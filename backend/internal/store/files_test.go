@@ -57,22 +57,18 @@ func openTestDB(t *testing.T) *sql.DB {
 		source TEXT NOT NULL DEFAULT 'manual',
 		PRIMARY KEY (file_id, tag_id)
 	);
-	CREATE TABLE IF NOT EXISTS virtual_folders (
+	CREATE TABLE IF NOT EXISTS folder_suggestions (
 		id INTEGER PRIMARY KEY AUTOINCREMENT,
 		name TEXT NOT NULL,
 		description TEXT NOT NULL DEFAULT '',
-		materialized INTEGER NOT NULL DEFAULT 0,
-		materialized_path TEXT,
-		source TEXT NOT NULL DEFAULT 'manual',
 		suggestion_type TEXT NOT NULL DEFAULT 'new_folder',
 		confidence REAL NOT NULL DEFAULT 0,
 		created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
 	);
-	CREATE TABLE IF NOT EXISTS virtual_folder_files (
-		virtual_folder_id INTEGER NOT NULL REFERENCES virtual_folders(id) ON DELETE CASCADE,
+	CREATE TABLE IF NOT EXISTS folder_suggestion_files (
+		folder_suggestion_id INTEGER NOT NULL REFERENCES folder_suggestions(id) ON DELETE CASCADE,
 		file_id INTEGER NOT NULL REFERENCES files(id) ON DELETE CASCADE,
-		source TEXT NOT NULL DEFAULT 'manual',
-		PRIMARY KEY (virtual_folder_id, file_id)
+		PRIMARY KEY (folder_suggestion_id, file_id)
 	);
 	CREATE TABLE IF NOT EXISTS folder_guard_classifications (
 		id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -185,25 +181,25 @@ func TestStore_FileCRUD(t *testing.T) {
 	})
 }
 
-func TestStore_VirtualFolders(t *testing.T) {
+func TestStore_Suggestions(t *testing.T) {
 	db := openTestDB(t)
 	s := New(db)
 
-	t.Run("create virtual folder", func(t *testing.T) {
-		vf, err := s.CreateVirtualFolder("test-folder", "a test", false)
+	t.Run("create suggestion", func(t *testing.T) {
+		sug, err := s.CreateSuggestion("test-folder", "a test", "new_folder", 0)
 		require.NoError(t, err)
-		require.NotZero(t, vf.ID)
-		require.Equal(t, "test-folder", vf.Name)
+		require.NotZero(t, sug.ID)
+		require.Equal(t, "test-folder", sug.Name)
 	})
 
-	t.Run("create auto virtual folder", func(t *testing.T) {
-		vf, err := s.CreateVirtualFolderWithType("auto-folder", "auto test", "auto", "new_folder", 0.5)
+	t.Run("create suggestion with type and confidence", func(t *testing.T) {
+		sug, err := s.CreateSuggestion("auto-folder", "auto test", "new_folder", 0.5)
 		require.NoError(t, err)
-		require.NotZero(t, vf.ID)
-		require.Equal(t, "auto", vf.Source)
+		require.NotZero(t, sug.ID)
+		require.Equal(t, 0.5, sug.Confidence)
 	})
 
-	t.Run("get virtual folder detail", func(t *testing.T) {
+	t.Run("get suggestion detail", func(t *testing.T) {
 		wdID := insertWatchedDir(t, db, "/vf")
 		fID := insertFile(t, db, struct {
 			path, name, ext, parentDir string
@@ -211,25 +207,33 @@ func TestStore_VirtualFolders(t *testing.T) {
 			processingStatus           string
 		}{"/vf/f.txt", "f.txt", ".txt", "/vf", wdID, "unprocessed"})
 
-		vf, _ := s.CreateVirtualFolder("detail-folder", "", false)
+		sug, _ := s.CreateSuggestion("detail-folder", "", "new_folder", 0)
 
-		err := s.AddFilesToFolder(vf.ID, []int64{fID}, "manual")
+		err := s.AddFilesToSuggestion(sug.ID, []int64{fID})
 		require.NoError(t, err)
 
-		detail, err := s.GetVirtualFolderDetail(vf.ID)
+		detail, err := s.GetSuggestionDetail(sug.ID)
 		require.NoError(t, err)
 		require.NotNil(t, detail)
 		require.Len(t, detail.Files, 1)
 		require.Equal(t, "f.txt", detail.Files[0].Name)
 	})
 
-	t.Run("delete virtual folder cascades", func(t *testing.T) {
-		vf, _ := s.CreateVirtualFolder("delete-me", "", false)
-		err := s.DeleteVirtualFolder(vf.ID)
+	t.Run("delete suggestion cascades", func(t *testing.T) {
+		sug, _ := s.CreateSuggestion("delete-me", "", "new_folder", 0)
+		err := s.DeleteSuggestion(sug.ID)
 		require.NoError(t, err)
 
-		got, _ := s.GetVirtualFolder(vf.ID)
+		got, _ := s.GetSuggestion(sug.ID)
 		require.Nil(t, got)
+	})
+
+	t.Run("list suggestions", func(t *testing.T) {
+		s.CreateSuggestion("sug1", "", "new_folder", 0.3)
+		s.CreateSuggestion("sug2", "", "new_folder", 0.7)
+		suggestions, err := s.ListSuggestions()
+		require.NoError(t, err)
+		require.GreaterOrEqual(t, len(suggestions), 2)
 	})
 }
 

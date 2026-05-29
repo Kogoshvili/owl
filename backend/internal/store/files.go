@@ -28,6 +28,8 @@ type File struct {
 
 const fileColumns = `id, path, name, extension, mime_type, size, parent_dir, watched_dir_id, status, modified_at, indexed_at, content_indexed_at, processing_status, processing_error, file_metadata`
 
+const SupportedExtsSQL = "('.txt','.md','.log','.csv','.json','.xml','.yaml','.yml','.toml','.ini','.cfg','.conf','.sh','.bat','.ps1','.py','.js','.ts','.go','.rs','.java','.c','.cpp','.h','.hpp','.rb','.php','.sql','.env','.gitignore','.html','.htm','.svg','.css','.scss','.pdf','.docx','.xlsx','.pptx')"
+
 func scanFile(scanner interface{ Scan(...any) error }, f *File) error {
 	var metadataJSON sql.NullString
 	err := scanner.Scan(&f.ID, &f.Path, &f.Name, &f.Extension, &f.MimeType, &f.Size, &f.ParentDir, &f.WatchedDirID, &f.Status, &f.ModifiedAt, &f.IndexedAt, &f.ContentIndexedAt, &f.ProcessingStatus, &f.ProcessingError, &metadataJSON)
@@ -104,11 +106,10 @@ func (s *Store) buildFileWhere(f FileFilter) (string, []any) {
 		args = append(args, *f.ProcessingStatus)
 	}
 	if f.Supported != nil {
-		supportedExts := "('.txt','.md','.log','.csv','.json','.xml','.yaml','.yml','.toml','.ini','.cfg','.conf','.sh','.bat','.ps1','.py','.js','.ts','.go','.rs','.java','.c','.cpp','.h','.hpp','.rb','.php','.sql','.env','.gitignore','.html','.htm','.svg','.css','.scss','.pdf','.docx','.xlsx','.pptx')"
 		if *f.Supported {
-			conditions = append(conditions, "LOWER(extension) IN "+supportedExts)
+			conditions = append(conditions, "LOWER(extension) IN "+SupportedExtsSQL)
 		} else {
-			conditions = append(conditions, "LOWER(extension) NOT IN "+supportedExts)
+			conditions = append(conditions, "LOWER(extension) NOT IN "+SupportedExtsSQL)
 		}
 	}
 
@@ -300,7 +301,7 @@ func (s *Store) SetScanned(paths []string) error {
 
 func (s *Store) QueueFilesForExtraction(dirID int64) (int64, error) {
 	result, err := s.db.Exec(
-		`UPDATE files SET processing_status = 'queued', processing_error = NULL WHERE watched_dir_id = ? AND processing_status IN ('unprocessed', 'stale', 'failed') AND LOWER(extension) IN ('.txt','.md','.log','.csv','.json','.xml','.yaml','.yml','.toml','.ini','.cfg','.conf','.sh','.bat','.ps1','.py','.js','.ts','.go','.rs','.java','.c','.cpp','.h','.hpp','.rb','.php','.sql','.env','.gitignore','.html','.htm','.svg','.css','.scss','.pdf','.docx','.xlsx','.pptx')`,
+		`UPDATE files SET processing_status = 'queued', processing_error = NULL WHERE watched_dir_id = ? AND processing_status IN ('unprocessed', 'stale', 'failed') AND LOWER(extension) IN `+SupportedExtsSQL,
 		dirID,
 	)
 	if err != nil {
@@ -315,7 +316,7 @@ func (s *Store) QueueFilesForExtraction(dirID int64) (int64, error) {
 
 func (s *Store) QueueFileForExtraction(fileID int64) error {
 	result, err := s.db.Exec(
-		`UPDATE files SET processing_status = 'queued', processing_error = NULL WHERE id = ? AND processing_status IN ('unprocessed', 'stale', 'failed') AND LOWER(extension) IN ('.txt','.md','.log','.csv','.json','.xml','.yaml','.yml','.toml','.ini','.cfg','.conf','.sh','.bat','.ps1','.py','.js','.ts','.go','.rs','.java','.c','.cpp','.h','.hpp','.rb','.php','.sql','.env','.gitignore','.html','.htm','.svg','.css','.scss','.pdf','.docx','.xlsx','.pptx')`,
+		`UPDATE files SET processing_status = 'queued', processing_error = NULL WHERE id = ? AND processing_status IN ('unprocessed', 'stale', 'failed') AND LOWER(extension) IN `+SupportedExtsSQL,
 		fileID,
 	)
 	if err != nil {

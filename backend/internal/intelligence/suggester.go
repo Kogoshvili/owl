@@ -112,18 +112,3 @@ func (s *Suggester) BuildClusterFiles(fileIDs []int64, corpusKeywords map[int64]
 	}
 	return result, nil
 }
-
-func (s *Suggester) CreateFolderFromSuggestion(suggestion Suggestion) (*store.VirtualFolder, error) {
-	folder, err := s.store.CreateVirtualFolder(suggestion.Name, suggestion.Description, true)
-	if err != nil {
-		return nil, err
-	}
-
-	err = s.store.AddFilesToFolder(folder.ID, suggestion.FileIDs, "auto")
-	if err != nil {
-		return nil, err
-	}
-
-	slog.Info("suggester: created folder from suggestion", "name", suggestion.Name, "files", len(suggestion.FileIDs))
-	return folder, nil
-}

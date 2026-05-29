@@ -158,68 +158,63 @@ export function deleteComment(fileId: number): Promise<void> {
   return request<void>(`/files/${fileId}/comment`, { method: "DELETE" })
 }
 
-export interface VirtualFolder {
+export interface FolderSuggestion {
   id: number
   name: string
   description: string
-  source: string
-  materialized: boolean
-  materialized_path: string | null
+  suggestion_type: string
+  confidence: number
   created_at: string
 }
 
-export interface VirtualFolderDetail {
+export interface FolderSuggestionDetail {
   id: number
   name: string
   description: string
-  source: string
-  materialized: boolean
-  materialized_path: string | null
+  suggestion_type: string
+  confidence: number
   created_at: string
   files: File[]
 }
 
-export function getVirtualFolders(source?: string): Promise<VirtualFolder[]> {
-  const p = new URLSearchParams()
-  if (source) p.set("source", source)
-  const qs = p.toString()
-  return request<VirtualFolder[]>(`/virtual-folders${qs ? "?" + qs : ""}`)
+export function listSuggestions(): Promise<FolderSuggestion[]> {
+  return request<FolderSuggestion[]>("/suggestions")
 }
 
-export function createVirtualFolder(name: string, description?: string): Promise<VirtualFolder> {
-  return request<VirtualFolder>("/virtual-folders", {
+export function createSuggestion(name: string, description?: string): Promise<FolderSuggestion> {
+  return request<FolderSuggestion>("/suggestions", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ name, description: description || "" }),
   })
 }
 
-export function updateVirtualFolder(id: number, name?: string, description?: string): Promise<VirtualFolder> {
-  return request<VirtualFolder>(`/virtual-folders/${id}`, {
+export function updateSuggestion(id: number, name?: string, description?: string): Promise<FolderSuggestion> {
+  return request<FolderSuggestion>(`/suggestions/${id}`, {
     method: "PATCH",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ name, description }),
   })
 }
 
-export function deleteVirtualFolder(id: number): Promise<void> {
-  return request<void>(`/virtual-folders/${id}`, { method: "DELETE" })
+export function deleteSuggestion(id: number): Promise<void> {
+  return request<void>(`/suggestions/${id}`, { method: "DELETE" })
 }
 
-export function getVirtualFolderDetail(id: number): Promise<VirtualFolderDetail> {
-  return request<VirtualFolderDetail>(`/virtual-folders/${id}`)
+export function getSuggestionDetail(id: number): Promise<FolderSuggestionDetail> {
+  return request<FolderSuggestionDetail>(`/suggestions/${id}`)
 }
 
-export function addFilesToFolder(folderId: number, fileIds: number[], source?: string): Promise<{status: string}> {
-  return request<{status: string}>(`/virtual-folders/${folderId}/files`, {
+export function addFilesToSuggestion(suggestionId: number, fileIds: number[]): Promise<{status: string}> {
+  return request<{status: string}>(`/suggestions/${suggestionId}/files`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ file_ids: fileIds, source: source || "manual" }),
+    body: JSON.stringify({ file_ids: fileIds }),
   })
 }
 
-export function removeFileFromFolder(folderId: number, fileId: number): Promise<void> {
-  return request<void>(`/virtual-folders/${folderId}/files/${fileId}`, { method: "DELETE" })
+export function removeFileFromSuggestion(suggestionId: number, fileId: number): Promise<void> {
+  return request<void>(`/suggestions/${suggestionId}/files/${fileId}`, { method: "DELETE" })
 }
 
 export interface SearchFileResult {
@@ -255,7 +250,7 @@ export interface TagWithCount {
   created_at: string
 }
 
-export interface FolderSuggestion {
+export interface FolderSuggestionDisplay {
   id: number
   name: string
   description: string
@@ -336,42 +331,36 @@ export function setFolderGuard(path: string, guarded: boolean): Promise<{status:
   })
 }
 
-export function listFolderSuggestions(): Promise<Record<string, FolderSuggestion>> {
-  return request<Record<string, FolderSuggestion>>("/intelligence/folders/suggestions")
+export function listFolderSuggestions(): Promise<Record<string, FolderSuggestionDisplay>> {
+  return request<Record<string, FolderSuggestionDisplay>>("/intelligence/folders/suggestions")
 }
 
-export function generateFolderSuggestions(params?: {
+export function generateSuggestions(params?: {
   name?: string
   description?: string
   min_files?: number
   min_similarity?: number
-}): Promise<{created: VirtualFolder[]}> {
-  return request<{created: VirtualFolder[]}>("/intelligence/folders/suggestions", {
+}): Promise<{status: string, message: string}> {
+  return request<{status: string, message: string}>("/intelligence/folders/suggestions", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(params || {}),
   })
 }
 
-export function acceptFolderSuggestion(id: number): Promise<VirtualFolder> {
-  return request<VirtualFolder>(`/intelligence/folders/suggestions/${id}/accept`, {
-    method: "POST",
-  })
-}
-
-export function dismissFolderSuggestion(id: number): Promise<void> {
+export function dismissSuggestion(id: number): Promise<void> {
   return request<void>(`/intelligence/folders/suggestions/${id}`, {
     method: "DELETE",
   })
 }
 
-export function refineFolder(id: number): Promise<{related: boolean, action: string, folder?: VirtualFolder}> {
-  return request<{related: boolean, action: string, folder?: VirtualFolder}>(`/intelligence/refine/folder/${id}`, {
+export function refineSuggestion(id: number): Promise<{status: string, id: number}> {
+  return request<{status: string, id: number}>(`/intelligence/refine/folder/${id}`, {
     method: "POST",
   })
 }
 
-export function refineAllFolderSuggestions(): Promise<{status: string, count: number}> {
+export function refineAllSuggestions(): Promise<{status: string, count: number}> {
   return request<{status: string, count: number}>(`/intelligence/folders/suggestions/refine-all`, {
     method: "POST",
   })
@@ -382,4 +371,26 @@ export function getUnprocessedCount(watchedDirId?: number): Promise<{count: numb
     return request<{count: number}>(`/intelligence/files/unprocessed/count?watched_dir_id=${watchedDirId}`)
   }
   return request<{count: number}>("/intelligence/files/unprocessed/count")
+}
+
+export function runGuard(): Promise<{status: string}> {
+  return request<{status: string}>("/intelligence/guard/run", { method: "POST" })
+}
+
+export function extractOrphans(): Promise<{status: string}> {
+  return request<{status: string}>("/intelligence/files/extract-orphans", { method: "POST" })
+}
+
+export interface ProcessingStats {
+  guarded: number
+  open: number
+  extractable: number
+  queued: number
+  processing: number
+  processed: number
+  failed: number
+}
+
+export function getProcessingStats(): Promise<ProcessingStats> {
+  return request<ProcessingStats>("/intelligence/files/processing-stats")
 }

@@ -8,10 +8,12 @@ import (
 	"net/http"
 	"owl/internal/config"
 	"owl/internal/embedding"
+	"owl/internal/extractor"
 	"owl/internal/intelligence"
 	"owl/internal/llm"
 	"owl/internal/store"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -23,6 +25,7 @@ type IntelligenceHandler struct {
 	analyzer         *intelligence.Analyzer
 	suggester        *intelligence.Suggester
 	llm              *llm.Client
+	extractor        *extractor.Extractor
 	registry         *intelligence.Registry
 	folderStrategy   intelligence.StrategyID
 	generationMu     sync.Mutex
@@ -39,7 +42,7 @@ type generationStatus struct {
 	CompletedAt  string `json:"completed_at,omitempty"`
 }
 
-func NewIntelligenceHandler(s *store.Store, llmClient *llm.Client, cfg *config.Config) *IntelligenceHandler {
+func NewIntelligenceHandler(s *store.Store, llmClient *llm.Client, ext *extractor.Extractor, cfg *config.Config) *IntelligenceHandler {
 	analyzer := intelligence.NewAnalyzer(s.Db())
 	registry := intelligence.NewRegistry()
 
@@ -60,6 +63,7 @@ func NewIntelligenceHandler(s *store.Store, llmClient *llm.Client, cfg *config.C
 		analyzer:         analyzer,
 		suggester:        suggester,
 		llm:              llmClient,
+		extractor:        ext,
 		registry:         registry,
 		folderStrategy:   folderStrategy,
 		generationStatus: nil,
@@ -136,16 +140,15 @@ func (h *IntelligenceHandler) AnalyzeFolderCoherence(w http.ResponseWriter, r *h
 }
 
 func (h *IntelligenceHandler) ListFolderSuggestions(w http.ResponseWriter, r *http.Request) {
-	autoSource := "auto"
-	folders, err := h.store.ListVirtualFolders(&autoSource)
+	suggestions, err := h.store.ListSuggestions()
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
 
-	suggestions := make(map[string]any)
-	for _, f := range folders {
-		detail, err := h.store.GetVirtualFolderDetail(f.ID)
+	result := make(map[string]any)
+	for _, s := range suggestions {
+		detail, err := h.store.GetSuggestionDetail(s.ID)
 		if err != nil || detail == nil {
 			continue
 		}
@@ -157,19 +160,19 @@ func (h *IntelligenceHandler) ListFolderSuggestions(w http.ResponseWriter, r *ht
 			preview = append(preview, file.Name)
 		}
 
-		suggestions[strconv.FormatInt(f.ID, 10)] = map[string]any{
-			"id":               f.ID,
-			"name":             f.Name,
-			"description":      f.Description,
-			"suggestion_type":  f.SuggestionType,
-			"confidence":       f.Confidence,
+		result[strconv.FormatInt(s.ID, 10)] = map[string]any{
+			"id":               s.ID,
+			"name":             s.Name,
+			"description":      s.Description,
+			"suggestion_type":  s.SuggestionType,
+			"confidence":       s.Confidence,
 			"file_count":       len(detail.Files),
 			"preview":          preview,
-			"created_at":       f.CreatedAt,
+			"created_at":       s.CreatedAt,
 		}
 	}
 
-	writeJSON(w, http.StatusOK, suggestions)
+	writeJSON(w, http.StatusOK, result)
 }
 
 type generateSuggestionsRequest struct {
@@ -211,8 +214,8 @@ func (h *IntelligenceHandler) generateSuggestionsAsync(ctx context.Context, minF
 	start := time.Now()
 	h.updateGenerationStatus("initializing", "Clearing old suggestions", 0, 1)
 
-	if err := h.store.DeleteVirtualFoldersBySource("auto"); err != nil {
-		slog.Error("failed to clear old auto suggestions", "error", err)
+	if err := h.store.DeleteAllSuggestions(); err != nil {
+		slog.Error("failed to clear old suggestions", "error", err)
 		h.updateGenerationStatus("error", "Failed to clear old suggestions", 0, 1)
 		return
 	}
@@ -367,20 +370,20 @@ func (h *IntelligenceHandler) generateSuggestionsAsync(ctx context.Context, minF
 			continue
 		}
 
-		folder, err := h.store.CreateVirtualFolderWithType(fs.Name, fs.Description, "auto", "new_folder", fs.Score)
+		suggestion, err := h.store.CreateSuggestion(fs.Name, fs.Description, "new_folder", fs.Score)
 		if err != nil {
-			slog.Warn("failed to create virtual folder", "name", fs.Name, "error", err)
+			slog.Warn("failed to create suggestion", "name", fs.Name, "error", err)
 			continue
 		}
 
-		if err := h.store.AddFilesToFolder(folder.ID, fs.FileIDs, "auto"); err != nil {
-			slog.Warn("failed to add files to folder", "id", folder.ID, "error", err)
-			h.store.DeleteVirtualFolder(folder.ID)
+		if err := h.store.AddFilesToSuggestion(suggestion.ID, fs.FileIDs); err != nil {
+			slog.Warn("failed to add files to suggestion", "id", suggestion.ID, "error", err)
+			h.store.DeleteSuggestion(suggestion.ID)
 			continue
 		}
 
 		saved++
-		slog.Debug("saved suggestion", "id", folder.ID, "name", fs.Name, "files", len(fs.FileIDs))
+		slog.Debug("saved suggestion", "id", suggestion.ID, "name", fs.Name, "files", len(fs.FileIDs))
 		h.updateGenerationStatus("saving", "Saving suggestions to DB", saved, len(folderSugs))
 	}
 
@@ -399,6 +402,57 @@ func (h *IntelligenceHandler) collectFileIDs(f *store.PhysicalFolder, folderToFi
 	}
 	for _, child := range f.Children {
 		h.collectFileIDs(child, folderToFileIDs)
+	}
+}
+
+func (h *IntelligenceHandler) escalateGuards(trees []*store.PhysicalFolder, guardMap map[string]bool) {
+	var allNodes []*store.PhysicalFolder
+	var collect func(f *store.PhysicalFolder)
+	collect = func(f *store.PhysicalFolder) {
+		allNodes = append(allNodes, f)
+		for _, child := range f.Children {
+			collect(child)
+		}
+	}
+	for _, tree := range trees {
+		collect(tree)
+	}
+
+	sort.Slice(allNodes, func(i, j int) bool {
+		return allNodes[i].Depth > allNodes[j].Depth
+	})
+
+	escalated := 0
+	for _, node := range allNodes {
+		if node.FileCount > 0 {
+			continue
+		}
+		if len(node.Children) == 0 {
+			continue
+		}
+		if guardMap[node.Path] {
+			continue
+		}
+		allGuarded := true
+		for _, child := range node.Children {
+			if !guardMap[child.Path] {
+				allGuarded = false
+				break
+			}
+		}
+		if allGuarded {
+			guardMap[node.Path] = true
+			if err := h.store.SetFolderGuard(node.Path, true, "llm", "All subfolders are guarded"); err != nil {
+				slog.Warn("failed to escalate guard", "path", node.Path, "error", err)
+			} else {
+				escalated++
+				slog.Info("guard escalated", "path", node.Path)
+			}
+		}
+	}
+
+	if escalated > 0 {
+		slog.Info("guard escalation complete", "escalated", escalated)
 	}
 }
 
@@ -707,19 +761,101 @@ func (h *IntelligenceHandler) GetGenerationStatus(w http.ResponseWriter, r *http
 	writeJSON(w, http.StatusOK, result)
 }
 
-func (h *IntelligenceHandler) AcceptFolderSuggestion(w http.ResponseWriter, r *http.Request) {
-	id, ok := parsePathID(w, r, "id")
-	if !ok {
-		return
-	}
+func (h *IntelligenceHandler) RunGuard(w http.ResponseWriter, r *http.Request) {
+	slog.Info("request method=POST path=/intelligence/guard/run")
 
-	folder, err := h.store.UpdateVirtualFolderSource(id, "manual")
+	go func() {
+		trees, err := h.store.ListPhysicalFoldersAll()
+		if err != nil {
+			slog.Error("guard: failed to list physical folders", "error", err)
+			return
+		}
+
+		folderToFileIDs := make(map[string][]int64)
+		for _, tree := range trees {
+			h.collectFileIDs(tree, folderToFileIDs)
+		}
+
+		guardMap, err := h.classifyFoldersWithGuard(context.Background(), folderToFileIDs, trees)
+		if err != nil {
+			slog.Error("guard: classification failed", "error", err)
+			return
+		}
+
+		h.escalateGuards(trees, guardMap)
+	}()
+
+	writeJSON(w, http.StatusAccepted, map[string]any{"status": "guard started"})
+}
+
+func (h *IntelligenceHandler) ExtractOrphans(w http.ResponseWriter, r *http.Request) {
+	slog.Info("request method=POST path=/intelligence/files/extract-orphans")
+
+	guardedPaths, err := h.store.GetGuardedPaths()
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
 
-	writeJSON(w, http.StatusOK, folder)
+	go func() {
+		trees, err := h.store.ListPhysicalFoldersAll()
+		if err != nil {
+			slog.Error("extract orphans: failed to list physical folders", "error", err)
+			return
+		}
+
+		queued := 0
+		for _, tree := range trees {
+			queued += h.extractOrphansInTree(tree, guardedPaths)
+		}
+
+		if queued > 0 && h.extractor != nil {
+			slog.Info("extract orphans: starting processing", "queued", queued)
+			h.extractor.ProcessAll(context.Background())
+		}
+	}()
+
+	writeJSON(w, http.StatusAccepted, map[string]any{"status": "extraction started"})
+}
+
+func (h *IntelligenceHandler) extractOrphansInTree(folder *store.PhysicalFolder, guardedPaths map[string]bool) int {
+	isGuarded := false
+	for path := range guardedPaths {
+		if guardedPaths[path] && (folder.Path == path || strings.HasPrefix(folder.Path, path+"/")) {
+			isGuarded = true
+			break
+		}
+	}
+
+	if isGuarded {
+		slog.Debug("extract orphans: skipping guarded folder", "path", folder.Path)
+		return 0
+	}
+
+	queued := 0
+
+	if folder.FileCount > 0 {
+		files, err := h.store.GetFilesInDir(folder.Path)
+		if err != nil {
+			slog.Warn("extract orphans: failed to get files", "path", folder.Path, "error", err)
+		} else {
+			for _, f := range files {
+				if f.ProcessingStatus == "unprocessed" || f.ProcessingStatus == "stale" || f.ProcessingStatus == "failed" {
+					if err := h.store.QueueFileForExtraction(f.ID); err != nil {
+						slog.Debug("extract orphans: skipped file", "id", f.ID, "reason", err)
+					} else {
+						queued++
+					}
+				}
+			}
+		}
+	}
+
+	for _, child := range folder.Children {
+		queued += h.extractOrphansInTree(child, guardedPaths)
+	}
+
+	return queued
 }
 
 func (h *IntelligenceHandler) DismissFolderSuggestion(w http.ResponseWriter, r *http.Request) {
@@ -728,7 +864,7 @@ func (h *IntelligenceHandler) DismissFolderSuggestion(w http.ResponseWriter, r *
 		return
 	}
 
-	if err := h.store.DeleteVirtualFolder(id); err != nil {
+	if err := h.store.DeleteSuggestion(id); err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
@@ -749,68 +885,68 @@ func (h *IntelligenceHandler) RefineFolder(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	folder, err := h.store.GetVirtualFolderDetail(id)
+	suggestion, err := h.store.GetSuggestionDetail(id)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
 
-	if folder == nil {
-		writeError(w, http.StatusNotFound, "folder not found")
+	if suggestion == nil {
+		writeError(w, http.StatusNotFound, "suggestion not found")
 		return
 	}
 
-	fileIDs := make([]int64, len(folder.Files))
-	for i, f := range folder.Files {
+	fileIDs := make([]int64, len(suggestion.Files))
+	for i, f := range suggestion.Files {
 		fileIDs[i] = f.ID
 	}
 
-	slog.Info("llm: starting refine folder", "id", id, "name", folder.Name, "files", len(fileIDs))
+	slog.Info("llm: starting refine suggestion", "id", id, "name", suggestion.Name, "files", len(fileIDs))
 
 	go func() {
 		corpusKeywords, err := h.analyzer.BuildCorpusTFIDF(fileIDs)
 		if err != nil {
-			slog.Error("llm: refine folder failed to build corpus", "id", id, "error", err)
+			slog.Error("llm: refine suggestion failed to build corpus", "id", id, "error", err)
 			return
 		}
 
 		fileNames := make(map[int64]string)
-		for _, f := range folder.Files {
+		for _, f := range suggestion.Files {
 			fileNames[f.ID] = f.Name
 		}
 
 		clusterFiles, err := h.suggester.BuildClusterFiles(fileIDs, corpusKeywords, fileNames)
 		if err != nil {
-			slog.Error("llm: refine folder failed to build cluster files", "id", id, "error", err)
+			slog.Error("llm: refine suggestion failed to build cluster files", "id", id, "error", err)
 			return
 		}
 
-		refinement, err := h.llm.RefineCluster(context.Background(), clusterFiles, fileIDs, folder.Name)
+		refinement, err := h.llm.RefineCluster(context.Background(), clusterFiles, fileIDs, suggestion.Name)
 		if err != nil {
-			slog.Error("llm: refine folder failed", "id", id, "name", folder.Name, "error", err)
+			slog.Error("llm: refine suggestion failed", "id", id, "name", suggestion.Name, "error", err)
 			return
 		}
 
 		if !refinement.Related {
-			slog.Info("llm: folder not related, deleting", "id", id, "name", folder.Name)
-			h.store.DeleteVirtualFolder(id)
+			slog.Info("llm: suggestion not related, deleting", "id", id, "name", suggestion.Name)
+			h.store.DeleteSuggestion(id)
 			return
 		}
 
-		if refinement.Name != "" && refinement.Name != folder.Name {
+		if refinement.Name != "" && refinement.Name != suggestion.Name {
 			name := refinement.Name
 			description := refinement.Description
-			if _, err := h.store.UpdateVirtualFolder(id, &name, &description); err != nil {
-				slog.Error("llm: refine folder failed to update", "id", id, "error", err)
+			if _, err := h.store.UpdateSuggestion(id, &name, &description); err != nil {
+				slog.Error("llm: refine suggestion failed to update", "id", id, "error", err)
 				return
 			}
-			slog.Info("llm: folder refined", "id", id, "name", folder.Name, "new_name", refinement.Name, "description", refinement.Description)
+			slog.Info("llm: suggestion refined", "id", id, "name", suggestion.Name, "new_name", refinement.Name, "description", refinement.Description)
 		}
 
 		if len(refinement.RemovedIDs) > 0 {
-			slog.Info("llm: folder refined, removing files", "id", id, "name", folder.Name, "removed_count", len(refinement.RemovedIDs))
+			slog.Info("llm: suggestion refined, removing files", "id", id, "name", suggestion.Name, "removed_count", len(refinement.RemovedIDs))
 			for _, fileID := range refinement.RemovedIDs {
-				h.store.RemoveFileFromFolder(id, fileID)
+				h.store.RemoveFileFromSuggestion(id, fileID)
 			}
 		}
 	}()
@@ -826,39 +962,38 @@ func (h *IntelligenceHandler) RefineAllSuggestions(w http.ResponseWriter, r *htt
 		return
 	}
 
-	autoSource := "auto"
-	folders, err := h.store.ListVirtualFolders(&autoSource)
+	suggestions, err := h.store.ListSuggestions()
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
 
-	slog.Info("refine-all: starting", "folders", len(folders))
+	slog.Info("refine-all: starting", "suggestions", len(suggestions))
 
-	for _, f := range folders {
-		go h.refineFolderAsync(f.ID)
+	for _, s := range suggestions {
+		go h.refineSuggestionAsync(s.ID)
 	}
 
-	writeJSON(w, http.StatusAccepted, map[string]any{"status": "refining", "count": len(folders)})
+	writeJSON(w, http.StatusAccepted, map[string]any{"status": "refining", "count": len(suggestions)})
 }
 
-func (h *IntelligenceHandler) refineFolderAsync(id int64) {
-	folder, err := h.store.GetVirtualFolderDetail(id)
+func (h *IntelligenceHandler) refineSuggestionAsync(id int64) {
+	suggestion, err := h.store.GetSuggestionDetail(id)
 	if err != nil {
-		slog.Error("refine-all: failed to get folder", "id", id, "error", err)
+		slog.Error("refine-all: failed to get suggestion", "id", id, "error", err)
 		return
 	}
 
-	if folder == nil {
+	if suggestion == nil {
 		return
 	}
 
-	fileIDs := make([]int64, len(folder.Files))
-	for i, f := range folder.Files {
+	fileIDs := make([]int64, len(suggestion.Files))
+	for i, f := range suggestion.Files {
 		fileIDs[i] = f.ID
 	}
 
-	slog.Info("refine-all: starting refine folder", "id", id, "name", folder.Name, "files", len(fileIDs))
+	slog.Info("refine-all: starting refine suggestion", "id", id, "name", suggestion.Name, "files", len(fileIDs))
 
 	corpusKeywords, err := h.analyzer.BuildCorpusTFIDF(fileIDs)
 	if err != nil {
@@ -867,7 +1002,7 @@ func (h *IntelligenceHandler) refineFolderAsync(id int64) {
 	}
 
 	fileNames := make(map[int64]string)
-	for _, f := range folder.Files {
+	for _, f := range suggestion.Files {
 		fileNames[f.ID] = f.Name
 	}
 
@@ -877,32 +1012,32 @@ func (h *IntelligenceHandler) refineFolderAsync(id int64) {
 		return
 	}
 
-	refinement, err := h.llm.RefineCluster(context.Background(), clusterFiles, fileIDs, folder.Name)
+	refinement, err := h.llm.RefineCluster(context.Background(), clusterFiles, fileIDs, suggestion.Name)
 	if err != nil {
-		slog.Error("refine-all: failed to refine folder", "id", id, "name", folder.Name, "error", err)
+		slog.Error("refine-all: failed to refine suggestion", "id", id, "name", suggestion.Name, "error", err)
 		return
 	}
 
 	if !refinement.Related {
-		slog.Info("refine-all: folder not related, deleting", "id", id, "name", folder.Name)
-		h.store.DeleteVirtualFolder(id)
+		slog.Info("refine-all: suggestion not related, deleting", "id", id, "name", suggestion.Name)
+		h.store.DeleteSuggestion(id)
 		return
 	}
 
-	if refinement.Name != "" && refinement.Name != folder.Name {
+	if refinement.Name != "" && refinement.Name != suggestion.Name {
 		name := refinement.Name
 		description := refinement.Description
-		if _, err := h.store.UpdateVirtualFolder(id, &name, &description); err != nil {
-			slog.Error("refine-all: failed to update folder", "id", id, "error", err)
+		if _, err := h.store.UpdateSuggestion(id, &name, &description); err != nil {
+			slog.Error("refine-all: failed to update suggestion", "id", id, "error", err)
 			return
 		}
-		slog.Info("refine-all: folder refined", "id", id, "name", folder.Name, "new_name", refinement.Name, "description", refinement.Description)
+		slog.Info("refine-all: suggestion refined", "id", id, "name", suggestion.Name, "new_name", refinement.Name, "description", refinement.Description)
 	}
 
 	if len(refinement.RemovedIDs) > 0 {
-		slog.Info("refine-all: folder refined, removing files", "id", id, "name", folder.Name, "removed_count", len(refinement.RemovedIDs))
+		slog.Info("refine-all: suggestion refined, removing files", "id", id, "name", suggestion.Name, "removed_count", len(refinement.RemovedIDs))
 		for _, fileID := range refinement.RemovedIDs {
-			h.store.RemoveFileFromFolder(id, fileID)
+			h.store.RemoveFileFromSuggestion(id, fileID)
 		}
 	}
 }
@@ -936,6 +1071,39 @@ func (h *IntelligenceHandler) GetUnprocessedCount(w http.ResponseWriter, r *http
 	}
 
 	writeJSON(w, http.StatusOK, map[string]any{"count": count})
+}
+
+type processingStats struct {
+	Guarded     int `json:"guarded"`
+	Open        int `json:"open"`
+	Extractable int `json:"extractable"`
+	Queued      int `json:"queued"`
+	Processing  int `json:"processing"`
+	Processed   int `json:"processed"`
+	Failed      int `json:"failed"`
+}
+
+func (h *IntelligenceHandler) GetProcessingStats(w http.ResponseWriter, r *http.Request) {
+	var stats processingStats
+
+	h.store.Db().QueryRow(`SELECT COUNT(*) FROM files WHERE status = 'active' AND processing_status = 'unprocessed' AND LOWER(extension) IN `+store.SupportedExtsSQL).Scan(&stats.Extractable)
+	h.store.Db().QueryRow(`SELECT COUNT(*) FROM files WHERE status = 'active' AND processing_status = 'queued'`).Scan(&stats.Queued)
+	h.store.Db().QueryRow(`SELECT COUNT(*) FROM files WHERE status = 'active' AND processing_status = 'processing'`).Scan(&stats.Processing)
+	h.store.Db().QueryRow(`SELECT COUNT(*) FROM files WHERE status = 'active' AND processing_status = 'processed'`).Scan(&stats.Processed)
+	h.store.Db().QueryRow(`SELECT COUNT(*) FROM files WHERE status = 'active' AND processing_status = 'failed'`).Scan(&stats.Failed)
+
+	allGuards, err := h.store.ListFolderGuards()
+	if err == nil {
+		for _, g := range allGuards {
+			if g.Guarded {
+				stats.Guarded++
+			} else {
+				stats.Open++
+			}
+		}
+	}
+
+	writeJSON(w, http.StatusOK, stats)
 }
 
 func (h *IntelligenceHandler) ListFolderGuards(w http.ResponseWriter, r *http.Request) {
@@ -973,6 +1141,10 @@ func (h *IntelligenceHandler) SetFolderGuard(w http.ResponseWriter, r *http.Requ
 	if err := h.store.SetFolderGuard(req.Path, req.Guarded, "user", reason); err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
+	}
+
+	if req.Guarded {
+		h.cleanDescendantGuards(req.Path)
 	}
 
 	writeJSON(w, http.StatusOK, map[string]any{"status": "ok"})

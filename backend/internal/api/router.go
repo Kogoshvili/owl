@@ -18,9 +18,9 @@ func NewRouter(s *store.Store, sc *scanner.Scanner, ext *extractor.Extractor, ll
 	wdh := handler.NewWatchedDirHandler(s, sc, ext)
 	fh := handler.NewFileHandler(s, ext)
 	ch := handler.NewCommentHandler(s)
-	vfh := handler.NewVirtualFolderHandler(s)
 	sh := handler.NewSearchHandler(s)
-	ih := handler.NewIntelligenceHandler(s, llmClient, cfg)
+	shh := handler.NewSuggestionHandler(s)
+	ih := handler.NewIntelligenceHandler(s, llmClient, ext, cfg)
 
 	mux.HandleFunc("GET /health", handleHealth)
 
@@ -41,14 +41,13 @@ func NewRouter(s *store.Store, sc *scanner.Scanner, ext *extractor.Extractor, ll
 	mux.HandleFunc("PUT /files/{id}/comment", ch.Upsert)
 	mux.HandleFunc("DELETE /files/{id}/comment", ch.Delete)
 
-	mux.HandleFunc("GET /virtual-folders", vfh.List)
-	mux.HandleFunc("POST /virtual-folders", vfh.Create)
-	mux.HandleFunc("GET /virtual-folders/{id}", vfh.Get)
-	mux.HandleFunc("PATCH /virtual-folders/{id}", vfh.Update)
-	mux.HandleFunc("DELETE /virtual-folders/{id}", vfh.Delete)
-	mux.HandleFunc("POST /virtual-folders/{id}/files", vfh.AddFiles)
-	mux.HandleFunc("DELETE /virtual-folders/{id}/files/{fileId}", vfh.RemoveFile)
-	mux.HandleFunc("POST /virtual-folders/{id}/materialize", vfh.Materialize)
+	mux.HandleFunc("GET /suggestions", shh.List)
+	mux.HandleFunc("POST /suggestions", shh.Create)
+	mux.HandleFunc("GET /suggestions/{id}", shh.Get)
+	mux.HandleFunc("PATCH /suggestions/{id}", shh.Update)
+	mux.HandleFunc("DELETE /suggestions/{id}", shh.Delete)
+	mux.HandleFunc("POST /suggestions/{id}/files", shh.AddFiles)
+	mux.HandleFunc("DELETE /suggestions/{id}/files/{fileId}", shh.RemoveFile)
 
 	mux.HandleFunc("GET /search", sh.Search)
 
@@ -58,14 +57,16 @@ func NewRouter(s *store.Store, sc *scanner.Scanner, ext *extractor.Extractor, ll
 	mux.HandleFunc("GET /intelligence/folders/physical/coherence", ih.AnalyzeFolderCoherence)
 	mux.HandleFunc("GET /intelligence/folders/suggestions", ih.ListFolderSuggestions)
 	mux.HandleFunc("POST /intelligence/folders/suggestions", ih.GenerateSuggestions)
-	mux.HandleFunc("POST /intelligence/folders/suggestions/{id}/accept", ih.AcceptFolderSuggestion)
 	mux.HandleFunc("DELETE /intelligence/folders/suggestions/{id}", ih.DismissFolderSuggestion)
 	mux.HandleFunc("POST /intelligence/folders/suggestions/refine-all", ih.RefineAllSuggestions)
 	mux.HandleFunc("GET /intelligence/folders/suggestions/status", ih.GetGenerationStatus)
 	mux.HandleFunc("POST /intelligence/refine/folder/{id}", ih.RefineFolder)
 	mux.HandleFunc("GET /intelligence/files/unprocessed/count", ih.GetUnprocessedCount)
+	mux.HandleFunc("GET /intelligence/files/processing-stats", ih.GetProcessingStats)
 	mux.HandleFunc("GET /intelligence/folders/guards", ih.ListFolderGuards)
 	mux.HandleFunc("PUT /intelligence/folders/guards", ih.SetFolderGuard)
+	mux.HandleFunc("POST /intelligence/guard/run", ih.RunGuard)
+	mux.HandleFunc("POST /intelligence/files/extract-orphans", ih.ExtractOrphans)
 
 	return middleware.Logging(middleware.CORS(mux))
 }

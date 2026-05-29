@@ -62,6 +62,13 @@ func (s *Store) UpdateWatchedDir(id int64, enabled *bool, recursive *bool) (*Wat
 }
 
 func (s *Store) DeleteWatchedDirAndFiles(id int64) error {
+	// Get the watched dir path to clean up related guard classifications
+	var path string
+	err := s.db.QueryRow(`SELECT path FROM watched_directories WHERE id = ?`, id).Scan(&path)
+	if err != nil {
+		return err
+	}
+
 	tx, err := s.db.Begin()
 	if err != nil {
 		return err
@@ -74,6 +81,11 @@ func (s *Store) DeleteWatchedDirAndFiles(id int64) error {
 	}
 
 	_, err = tx.Exec(`DELETE FROM files WHERE watched_dir_id = ?`, id)
+	if err != nil {
+		return err
+	}
+
+	_, err = tx.Exec(`DELETE FROM folder_guard_classifications WHERE path = ? OR path LIKE ?`, path, path+"/%")
 	if err != nil {
 		return err
 	}
