@@ -61,11 +61,6 @@ func (s *Store) UpdateWatchedDir(id int64, enabled *bool, recursive *bool) (*Wat
 	return s.GetWatchedDir(id)
 }
 
-func (s *Store) DeleteWatchedDir(id int64) error {
-	_, err := s.db.Exec(`DELETE FROM watched_directories WHERE id = ?`, id)
-	return err
-}
-
 func (s *Store) DeleteWatchedDirAndFiles(id int64) error {
 	tx, err := s.db.Begin()
 	if err != nil {

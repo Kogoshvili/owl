@@ -39,10 +39,11 @@ function FolderTreeNode({ folder, depth, onSelect, selectedPath, coherenceMap, g
   guardMap?: Record<string, boolean>
   onToggleGuard?: (path: string, guarded: boolean) => void
 }) {
-  const [expanded, setExpanded] = useState(depth < 2)
+  const [expanded, setExpanded] = useState(false)
   const [files, setFiles] = useState<OwlFile[] | null>(null)
   const [loadingFiles, setLoadingFiles] = useState(false)
   const hasChildren = folder.children && folder.children.length > 0
+  const canExpand = hasChildren || folder.file_count > 0
   const isSelected = selectedPath === folder.path
   const coherence = coherenceMap?.[folder.path]
   const showCoherence = depth > 0 && coherence
@@ -79,10 +80,10 @@ function FolderTreeNode({ folder, depth, onSelect, selectedPath, coherenceMap, g
         style={{ "--depth": String(depth) } as any}
         onClick={toggleExpanded}
       >
-        <span class={`folder-tree-toggle ${hasChildren ? "" : "invisible"}`}>
+        <span class={`folder-tree-toggle ${canExpand ? "" : "invisible"}`}>
           {expanded ? "▾" : "▸"}
         </span>
-        <span class="folder-tree-icon">{hasChildren ? (expanded ? "📂" : "📁") : "📄"}</span>
+        <span class="folder-tree-icon">{canExpand ? (expanded ? "📂" : "📁") : "📄"}</span>
         <span class="folder-tree-name">{folder.name}</span>
         {folder.file_count > 0 && (
           <span class="folder-tree-count">({folder.file_count})</span>

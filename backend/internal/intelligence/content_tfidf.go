@@ -7,7 +7,6 @@ import (
 	"owl/internal/llm"
 	"owl/internal/store"
 	"sort"
-	"strings"
 	"time"
 )
 
@@ -277,37 +276,6 @@ func (s *ContentTFIDFStrategy) SuggestFoldersWithCorpus(ctx context.Context, fil
 	return suggestions, nil
 }
 
-func (s *ContentTFIDFStrategy) buildClusterFiles(fileIDs []int64, corpusKeywords map[int64][]Keyword, fileNames map[int64]string) []llm.ClusterFile {
-	result := []llm.ClusterFile{}
-	for _, fileID := range fileIDs {
-		name, ok := fileNames[fileID]
-		if !ok {
-			continue
-		}
-		file, err := s.store.GetFile(fileID)
-		if err != nil || file == nil {
-			continue
-		}
-		keywords := []string{}
-		if kw, ok := corpusKeywords[fileID]; ok {
-			for i, k := range kw {
-				if i >= 5 {
-					break
-				}
-				keywords = append(keywords, k.Term)
-			}
-		}
-		result = append(result, llm.ClusterFile{
-			ID:        fileID,
-			Name:      name,
-			Extension: file.Extension,
-			ParentDir: file.ParentDir,
-			Keywords:  keywords,
-		})
-	}
-	return result
-}
-
 func cosineSimilarityMaps(a, b map[string]float64) float64 {
 	if len(a) == 0 || len(b) == 0 {
 		return 0
@@ -340,37 +308,4 @@ func sqrt(x float64) float64 {
 		z = (z + x/z) / 2
 	}
 	return z
-}
-
-func (s *ContentTFIDFStrategy) collectContentTags(file *store.File, keywords []Keyword, seen map[string]bool) []string {
-	var tags []string
-
-	extTag := getExtensionTag(file.Extension)
-	if extTag != "" && !seen[extTag] {
-		tags = append(tags, extTag)
-		seen[extTag] = true
-	}
-
-	for i, kw := range keywords {
-		if i >= 10 {
-			break
-		}
-		if !seen[kw.Term] && !IsStopword(kw.Term) && !IsNumeric(kw.Term) && len(kw.Term) >= 3 {
-			tags = append(tags, kw.Term)
-			seen[kw.Term] = true
-		}
-	}
-
-	return tags
-}
-
-func joinKeywords(keywords []Keyword, max int) string {
-	terms := make([]string, 0, max)
-	for i, kw := range keywords {
-		if i >= max {
-			break
-		}
-		terms = append(terms, kw.Term)
-	}
-	return strings.Join(terms, " ")
 }

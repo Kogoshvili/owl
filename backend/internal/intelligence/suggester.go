@@ -11,7 +11,6 @@ const (
 	MinFilesForFolder           = 3
 	maxFilesForLLM              = 50
 	subClusterThresholdBoost    = 0.15
-	maxFilesForNaming           = 30
 )
 
 type Suggestion struct {

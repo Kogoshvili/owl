@@ -271,7 +271,7 @@ func (h *IntelligenceHandler) ListFolderSuggestions(w http.ResponseWriter, r *ht
 	suggestions := make(map[string]any)
 	for _, f := range folders {
 		detail, err := h.store.GetVirtualFolderDetail(f.ID)
-		if err != nil {
+		if err != nil || detail == nil {
 			continue
 		}
 		preview := make([]string, 0, 5)

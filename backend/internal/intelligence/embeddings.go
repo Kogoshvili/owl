@@ -296,37 +296,6 @@ func (s *EmbeddingsStrategy) inferTagName(ctx context.Context, fileIDs []int64) 
 	return "", nil
 }
 
-func (s *EmbeddingsStrategy) buildClusterFiles(fileIDs []int64, corpusKeywords map[int64][]Keyword, fileNames map[int64]string) []llm.ClusterFile {
-	result := []llm.ClusterFile{}
-	for _, fileID := range fileIDs {
-		name, ok := fileNames[fileID]
-		if !ok {
-			continue
-		}
-		file, err := s.store.GetFile(fileID)
-		if err != nil || file == nil {
-			continue
-		}
-		keywords := []string{}
-		if kw, ok := corpusKeywords[fileID]; ok {
-			for i, k := range kw {
-				if i >= 5 {
-					break
-				}
-				keywords = append(keywords, k.Term)
-			}
-		}
-		result = append(result, llm.ClusterFile{
-			ID:        fileID,
-			Name:      name,
-			Extension: file.Extension,
-			ParentDir: file.ParentDir,
-			Keywords:  keywords,
-		})
-	}
-	return result
-}
-
 func (s *EmbeddingsStrategy) avgIntraClusterSimilarity(points []cluster.Point, embeddings map[int64][]float32) float32 {
 	if len(points) < 2 {
 		return 0

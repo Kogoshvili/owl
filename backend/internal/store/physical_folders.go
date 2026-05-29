@@ -164,34 +164,6 @@ func (s *Store) ListPhysicalFoldersAll() ([]*PhysicalFolder, error) {
 	return allTrees, nil
 }
 
-func (s *Store) CountFilesInDir(parentDir string) (int, error) {
-	var cnt int
-	err := s.db.QueryRow(`SELECT COUNT(*) FROM files WHERE parent_dir = ? AND status = 'active'`, parentDir).Scan(&cnt)
-	return cnt, err
-}
-
-func (s *Store) ListSubDirs(parentDir string) ([]string, error) {
-	rows, err := s.db.Query(`
-		SELECT DISTINCT parent_dir FROM files
-		WHERE parent_dir LIKE ? AND status = 'active'
-		ORDER BY parent_dir
-	`, parentDir+"/%")
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	var dirs []string
-	for rows.Next() {
-		var dir string
-		if err := rows.Scan(&dir); err != nil {
-			return nil, err
-		}
-		dirs = append(dirs, dir)
-	}
-	return dirs, rows.Err()
-}
-
 func (s *Store) GetFilesInDir(parentDir string) ([]File, error) {
 	parentDir = strings.TrimRight(parentDir, "/")
 	source := "active"
@@ -219,53 +191,6 @@ func (s *Store) GetFilesInDir(parentDir string) ([]File, error) {
 		files = append(files, f)
 	}
 	return files, rows.Err()
-}
-
-func (s *Store) GetWatchedDirPath(id int64) (string, error) {
-	var path string
-	err := s.db.QueryRow(`SELECT path FROM watched_directories WHERE id = ?`, id).Scan(&path)
-	if err != nil {
-		return "", err
-	}
-	path = filepath.ToSlash(path)
-	path = strings.TrimRight(path, "/")
-	return path, nil
-}
-
-func (s *Store) ListAllFileIDs(watchedDirID int64) ([]int64, error) {
-	rows, err := s.db.Query(`SELECT id FROM files WHERE watched_dir_id = ? AND status = 'active'`, watchedDirID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	var fileIDs []int64
-	for rows.Next() {
-		var id int64
-		if err := rows.Scan(&id); err != nil {
-			return nil, err
-		}
-		fileIDs = append(fileIDs, id)
-	}
-	return fileIDs, rows.Err()
-}
-
-func (s *Store) ListAllFileIDsAll() ([]int64, error) {
-	rows, err := s.db.Query(`SELECT id FROM files WHERE status = 'active'`)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	var fileIDs []int64
-	for rows.Next() {
-		var id int64
-		if err := rows.Scan(&id); err != nil {
-			return nil, err
-		}
-		fileIDs = append(fileIDs, id)
-	}
-	return fileIDs, rows.Err()
 }
 
 func (s *Store) GetFileNames(fileIDs []int64) (map[int64]string, error) {
