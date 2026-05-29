@@ -1,5 +1,6 @@
 import { useState } from "preact/hooks"
-import { useSuggestionDetail, useRemoveFileFromSuggestion, useUpdateSuggestion, useDeleteSuggestion, useAddFilesToSuggestion, useRefineSuggestion, useAcceptSuggestion } from "../hooks/queries"
+import { useSuggestionDetail, useRemoveFileFromSuggestion, useUpdateSuggestion, useDeleteSuggestion, useAddFilesToSuggestion, useRefineSuggestion, useAcceptSuggestion, useLlmStatus } from "../hooks/queries"
+import { useToast } from "../hooks/toast"
 import { FilePickerDialog } from "../components/file-picker-dialog"
 import { route } from "preact-router"
 import type { FolderSuggestion } from "../api"
@@ -12,13 +13,15 @@ function formatBytes(bytes: number): string {
   return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + " " + sizes[i]
 }
 
-function SuggestionHeader({ suggestion, updateMutation, deleteMutation, refineMutation, acceptMutation }: {
+function SuggestionHeader({ suggestion, updateMutation, deleteMutation, refineMutation, acceptMutation, llmAvailable }: {
   suggestion: FolderSuggestion
   updateMutation: ReturnType<typeof useUpdateSuggestion>
   deleteMutation: ReturnType<typeof useDeleteSuggestion>
   refineMutation: ReturnType<typeof useRefineSuggestion>
   acceptMutation: ReturnType<typeof useAcceptSuggestion>
+  llmAvailable: boolean
 }) {
+  const toast = useToast()
   const [editing, setEditing] = useState(false)
   const [name, setName] = useState(suggestion.name)
   const [desc, setDesc] = useState(suggestion.description)
@@ -30,25 +33,32 @@ function SuggestionHeader({ suggestion, updateMutation, deleteMutation, refineMu
     try {
       await updateMutation.mutateAsync({ id: suggestion.id, name: name.trim() || undefined, description: desc.trim() || undefined })
       setEditing(false)
+      toast.show({ type: "success", message: "Suggestion updated" })
     } catch (e: any) {
-      setError(e.message)
+      toast.show({ type: "error", message: e.message })
     }
   }
 
   const handleDismiss = async () => {
     try {
       await deleteMutation.mutateAsync(suggestion.id)
+      toast.show({ type: "success", message: "Suggestion dismissed" })
       route("/suggestions")
     } catch (e: any) {
-      setError(e.message)
+      toast.show({ type: "error", message: e.message })
     }
   }
 
   const handleRefine = async () => {
+    if (!llmAvailable) {
+      toast.show({ type: "error", message: "LLM not available for refinement" })
+      return
+    }
     try {
       await refineMutation.mutateAsync(suggestion.id)
+      toast.show({ type: "success", message: "Suggestion refined" })
     } catch (e: any) {
-      setError(e.message)
+      toast.show({ type: "error", message: e.message })
     }
   }
 
@@ -56,8 +66,9 @@ function SuggestionHeader({ suggestion, updateMutation, deleteMutation, refineMu
     try {
       await acceptMutation.mutateAsync({ id: suggestion.id, destination: acceptDest || undefined })
       setShowAccept(false)
+      toast.show({ type: "success", message: "Files materialized" })
     } catch (e: any) {
-      setError(e.message)
+      toast.show({ type: "error", message: e.message })
     }
   }
 
@@ -95,7 +106,7 @@ function SuggestionHeader({ suggestion, updateMutation, deleteMutation, refineMu
             {acceptMutation.isPending ? "Moving..." : "Accept"}
           </button>
         )}
-        <button class="btn btn-sm btn-primary" onClick={handleRefine} disabled={refineMutation.isPending}>
+        <button class="btn btn-sm btn-primary" onClick={handleRefine} disabled={refineMutation.isPending || !llmAvailable} title={!llmAvailable ? "Requires LLM" : ""}>
           {refineMutation.isPending ? "Refining..." : "Refine"}
         </button>
         <button class="btn btn-sm btn-danger" onClick={handleDismiss} disabled={deleteMutation.isPending}>
@@ -132,6 +143,7 @@ function SuggestionHeader({ suggestion, updateMutation, deleteMutation, refineMu
 }
 
 export function SuggestionDetailPage({ id }: { id: string }) {
+  const toast = useToast()
   const suggestionId = parseInt(id, 10)
   const detailQuery = useSuggestionDetail(isNaN(suggestionId) ? null : suggestionId)
   const removeMutation = useRemoveFileFromSuggestion()
@@ -140,10 +152,13 @@ export function SuggestionDetailPage({ id }: { id: string }) {
   const addFilesMutation = useAddFilesToSuggestion()
   const refineMutation = useRefineSuggestion()
   const acceptMutation = useAcceptSuggestion()
+  const llmQuery = useLlmStatus()
+  const llmAvailable = llmQuery.data?.llm_available ?? false
   const [pickerOpen, setPickerOpen] = useState(false)
 
   if (isNaN(suggestionId)) return <div class="page"><div class="error-msg">Invalid suggestion ID</div></div>
   if (detailQuery.isLoading) return <div class="page"><div class="empty">Loading...</div></div>
+  if (detailQuery.isError) return <div class="page"><div class="error-msg">Failed to load suggestion: {detailQuery.error?.message}</div></div>
   if (!detailQuery.data) return <div class="page"><div class="empty">Suggestion not found</div></div>
 
   const suggestion = detailQuery.data
@@ -153,8 +168,9 @@ export function SuggestionDetailPage({ id }: { id: string }) {
   const handleRemoveFile = async (fileId: number) => {
     try {
       await removeMutation.mutateAsync({ suggestionId, fileId })
+      toast.show({ type: "success", message: "File removed" })
     } catch (e: any) {
-      console.error(e)
+      toast.show({ type: "error", message: e.message })
     }
   }
 
@@ -162,16 +178,23 @@ export function SuggestionDetailPage({ id }: { id: string }) {
     try {
       await addFilesMutation.mutateAsync({ suggestionId, fileIds })
       setPickerOpen(false)
+      toast.show({ type: "success", message: "Files added" })
     } catch (e: any) {
-      console.error(e)
+      toast.show({ type: "error", message: e.message })
     }
   }
 
   return (
     <div class="page folder-detail-page">
+      {!llmAvailable && (
+        <div class="llm-banner">
+          LLM not available. Refinement is disabled.
+          {llmQuery.isLoading && " Checking…"}
+        </div>
+      )}
       <button class="btn btn-back" onClick={() => route("/suggestions")}>&larr; Back</button>
 
-      <SuggestionHeader suggestion={suggestion} updateMutation={updateMutation} deleteMutation={deleteMutation} refineMutation={refineMutation} acceptMutation={acceptMutation} />
+      <SuggestionHeader suggestion={suggestion} updateMutation={updateMutation} deleteMutation={deleteMutation} refineMutation={refineMutation} acceptMutation={acceptMutation} llmAvailable={llmAvailable} />
 
       <div class="folder-section">
         <div class="folder-section-header">

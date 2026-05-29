@@ -1,6 +1,7 @@
 import { useState, useEffect } from "preact/hooks"
 import { type File as OwlFile, type PhysicalFolder } from "../api"
 import { useFileExtensions, useExtractFile, usePhysicalFolders, useFolderGuards, useSetFolderGuard } from "../hooks/queries"
+import { useToast } from "../hooks/toast"
 import { listPhysicalFolderFiles } from "../api"
 import { route } from "preact-router"
 
@@ -13,6 +14,7 @@ export interface FileTreeFilterState {
 const PROCESSING_STATUSES = ["unprocessed", "queued", "processing", "processed", "stale", "failed"] as const
 
 export function FileTree() {
+  const toast = useToast()
   const physicalFoldersQuery = usePhysicalFolders()
   const folderGuardsQuery = useFolderGuards()
   const setFolderGuardMutation = useSetFolderGuard()
@@ -35,8 +37,8 @@ export function FileTree() {
     try {
       await extractMutation.mutateAsync(fileId)
       setRefreshKey(n => n + 1)
-    } catch (error) {
-      console.error("Failed to extract file:", error)
+    } catch (error: any) {
+      toast.show({ type: "error", message: "Extract failed: " + error.message })
     }
   }
 

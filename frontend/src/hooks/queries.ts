@@ -33,6 +33,8 @@ import {
   listStrategies,
   runGuard,
   extractOrphans,
+  getGuardStatus,
+  getLlmStatus,
 } from "../api"
 import type { FileListFilterState } from "../api"
 
@@ -143,6 +145,7 @@ export function useProcessingStats() {
   return useQuery({
     queryKey: ["processingStats"],
     queryFn: getProcessingStats,
+    refetchInterval: 5000,
   })
 }
 
@@ -302,10 +305,9 @@ export function useRunGuard() {
   return useMutation({
     mutationFn: () => runGuard(),
     onSuccess: () => {
-      setTimeout(() => {
-        qc.invalidateQueries({ queryKey: ["folderGuards"] })
-        qc.invalidateQueries({ queryKey: ["physicalFolders"] })
-      }, 5000)
+      qc.invalidateQueries({ queryKey: ["folderGuards"] })
+      qc.invalidateQueries({ queryKey: ["physicalFolders"] })
+      qc.invalidateQueries({ queryKey: ["processingStats"] })
     },
   })
 }
@@ -316,6 +318,7 @@ export function useExtractOrphans() {
     mutationFn: () => extractOrphans(),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["unprocessedCount"] })
+      qc.invalidateQueries({ queryKey: ["processingStats"] })
     },
   })
 }
@@ -346,6 +349,23 @@ export function useDeleteComment() {
     onSuccess: (_data, fileId) => {
       qc.invalidateQueries({ queryKey: ["file", fileId] })
     },
+  })
+}
+
+export function useGuardStatus(enabled: boolean) {
+  return useQuery({
+    queryKey: ["guardStatus"],
+    queryFn: getGuardStatus,
+    refetchInterval: enabled ? 2000 : false,
+    enabled,
+  })
+}
+
+export function useLlmStatus() {
+  return useQuery({
+    queryKey: ["llmStatus"],
+    queryFn: getLlmStatus,
+    refetchInterval: 30000,
   })
 }
 

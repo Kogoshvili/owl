@@ -335,6 +335,7 @@ export function generateSuggestions(params?: {
   description?: string
   min_files?: number
   min_similarity?: number
+  strategy?: string
 }): Promise<{status: string, message: string}> {
   return request<{status: string, message: string}>("/intelligence/folders/suggestions", {
     method: "POST",
@@ -368,8 +369,41 @@ export function getUnprocessedCount(watchedDirId?: number): Promise<{count: numb
   return request<{count: number}>("/intelligence/files/unprocessed/count")
 }
 
+export interface GenerationStatus {
+  active: boolean
+  stage?: string
+  message?: string
+  progress?: number
+  total?: number
+  started_at?: string
+  completed_at?: string
+}
+
+export function getGenerationStatus(): Promise<GenerationStatus> {
+  return request<GenerationStatus>("/intelligence/folders/suggestions/status")
+}
+
 export function runGuard(): Promise<{status: string}> {
   return request<{status: string}>("/intelligence/guard/run", { method: "POST" })
+}
+
+export interface GuardStatus {
+  running: boolean
+  stage?: string
+  progress?: number
+  total?: number
+  message?: string
+  started_at?: string
+  completed_at?: string
+  error?: string
+}
+
+export function getGuardStatus(): Promise<GuardStatus> {
+  return request<GuardStatus>("/intelligence/guard/status")
+}
+
+export function getLlmStatus(): Promise<{llm_available: boolean; embedding_available: boolean}> {
+  return request<{llm_available: boolean; embedding_available: boolean}>("/intelligence/llm/status")
 }
 
 export function extractOrphans(): Promise<{status: string}> {

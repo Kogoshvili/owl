@@ -30,6 +30,8 @@ type IntelligenceHandler struct {
 	folderStrategy   intelligence.StrategyID
 	generationMu     sync.Mutex
 	generationStatus *generationStatus
+	guardMu          sync.Mutex
+	guardStatus      *operationStatus
 	maxGuardDepth    int
 }
 
@@ -40,6 +42,17 @@ type generationStatus struct {
 	Total        int    `json:"total"`
 	StartedAt    string `json:"started_at"`
 	CompletedAt  string `json:"completed_at,omitempty"`
+}
+
+type operationStatus struct {
+	Running     bool   `json:"running"`
+	Stage       string `json:"stage,omitempty"`
+	Progress    int    `json:"progress,omitempty"`
+	Total       int    `json:"total,omitempty"`
+	Message     string `json:"message,omitempty"`
+	StartedAt   string `json:"started_at,omitempty"`
+	CompletedAt string `json:"completed_at,omitempty"`
+	Error       string `json:"error,omitempty"`
 }
 
 func NewIntelligenceHandler(s *store.Store, llmClient *llm.Client, ext *extractor.Extractor, cfg *config.Config) *IntelligenceHandler {
@@ -180,6 +193,7 @@ type generateSuggestionsRequest struct {
 	Description     *string  `json:"description"`
 	MinFiles        *int     `json:"min_files"`
 	MinSimilarity   *float64 `json:"min_similarity"`
+	Strategy        *string  `json:"strategy"`
 }
 
 func (h *IntelligenceHandler) GenerateSuggestions(w http.ResponseWriter, r *http.Request) {
@@ -190,6 +204,9 @@ func (h *IntelligenceHandler) GenerateSuggestions(w http.ResponseWriter, r *http
 	}
 
 	strategyID := h.folderStrategy
+	if req.Strategy != nil && *req.Strategy != "" {
+		strategyID = intelligence.StrategyID(*req.Strategy)
+	}
 
 	minFiles := intelligence.MinFilesForFolder
 	if req.MinFiles != nil && *req.MinFiles > 0 {
@@ -764,10 +781,14 @@ func (h *IntelligenceHandler) GetGenerationStatus(w http.ResponseWriter, r *http
 func (h *IntelligenceHandler) RunGuard(w http.ResponseWriter, r *http.Request) {
 	slog.Info("request method=POST path=/intelligence/guard/run")
 
+	h.clearGuardStatus()
+
 	go func() {
+		h.updateGuardStatus("listing", "Listing folders", 0, 1)
 		trees, err := h.store.ListPhysicalFoldersAll()
 		if err != nil {
 			slog.Error("guard: failed to list physical folders", "error", err)
+			h.updateGuardStatusError("Failed to list physical folders: " + err.Error())
 			return
 		}
 
@@ -776,16 +797,97 @@ func (h *IntelligenceHandler) RunGuard(w http.ResponseWriter, r *http.Request) {
 			h.collectFileIDs(tree, folderToFileIDs)
 		}
 
+		h.updateGuardStatus("classifying", "Classifying folders with LLM", 0, len(folderToFileIDs))
+
 		guardMap, err := h.classifyFoldersWithGuard(context.Background(), folderToFileIDs, trees)
 		if err != nil {
 			slog.Error("guard: classification failed", "error", err)
+			h.updateGuardStatusError("Failed to classify folders: " + err.Error())
 			return
 		}
 
+		h.updateGuardStatus("escalating", "Escalating guards", 0, 1)
 		h.escalateGuards(trees, guardMap)
+
+		h.updateGuardStatusCompleted("Guard complete")
+		slog.Info("guard: complete")
 	}()
 
 	writeJSON(w, http.StatusAccepted, map[string]any{"status": "guard started"})
+}
+
+func (h *IntelligenceHandler) GetGuardStatus(w http.ResponseWriter, r *http.Request) {
+	h.guardMu.Lock()
+	defer h.guardMu.Unlock()
+
+	if h.guardStatus == nil || !h.guardStatus.Running && h.guardStatus.CompletedAt == "" {
+		writeJSON(w, http.StatusOK, map[string]any{"running": false})
+		return
+	}
+	writeJSON(w, http.StatusOK, h.guardStatus)
+}
+
+func (h *IntelligenceHandler) GetLlmStatus(w http.ResponseWriter, r *http.Request) {
+	llmAvailable := false
+	if h.llm != nil {
+		llmAvailable = h.llm.IsAvailable(r.Context())
+	}
+
+	strategies := h.registry.List()
+	embeddingAvailable := false
+	for _, s := range strategies {
+		if s.ID == "embeddings" {
+			embeddingAvailable = s.Available
+			break
+		}
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{
+		"llm_available":      llmAvailable,
+		"embedding_available": embeddingAvailable,
+	})
+}
+
+func (h *IntelligenceHandler) updateGuardStatus(stage string, message string, progress, total int) {
+	h.guardMu.Lock()
+	defer h.guardMu.Unlock()
+	now := time.Now().Format(time.RFC3339)
+	if h.guardStatus == nil {
+		h.guardStatus = &operationStatus{Running: true, StartedAt: now}
+	}
+	h.guardStatus.Running = true
+	h.guardStatus.Stage = stage
+	h.guardStatus.Message = message
+	h.guardStatus.Progress = progress
+	h.guardStatus.Total = total
+}
+
+func (h *IntelligenceHandler) updateGuardStatusError(msg string) {
+	h.guardMu.Lock()
+	defer h.guardMu.Unlock()
+	if h.guardStatus == nil {
+		h.guardStatus = &operationStatus{StartedAt: time.Now().Format(time.RFC3339)}
+	}
+	h.guardStatus.Running = false
+	h.guardStatus.Error = msg
+	h.guardStatus.CompletedAt = time.Now().Format(time.RFC3339)
+}
+
+func (h *IntelligenceHandler) updateGuardStatusCompleted(msg string) {
+	h.guardMu.Lock()
+	defer h.guardMu.Unlock()
+	if h.guardStatus == nil {
+		h.guardStatus = &operationStatus{StartedAt: time.Now().Format(time.RFC3339)}
+	}
+	h.guardStatus.Running = false
+	h.guardStatus.Message = msg
+	h.guardStatus.CompletedAt = time.Now().Format(time.RFC3339)
+}
+
+func (h *IntelligenceHandler) clearGuardStatus() {
+	h.guardMu.Lock()
+	defer h.guardMu.Unlock()
+	h.guardStatus = nil
 }
 
 func (h *IntelligenceHandler) ExtractOrphans(w http.ResponseWriter, r *http.Request) {

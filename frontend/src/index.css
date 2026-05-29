@@ -3,6 +3,7 @@
   --text-h: #08060d;
   --bg: #fff;
   --border: #e5e4e7;
+  --accent: #6366f1;
 
   font-family: system-ui, 'Segoe UI', Roboto, sans-serif;
   color: var(--text);
@@ -16,6 +17,7 @@
     --text-h: #f3f4f6;
     --bg: #16171d;
     --border: #2e303a;
+    --accent: #818cf8;
   }
 }
 

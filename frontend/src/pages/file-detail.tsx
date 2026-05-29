@@ -1,5 +1,6 @@
 import { useState } from "preact/hooks"
 import { useFileDetail, useUpsertComment, useDeleteComment, useExtractFile } from "../hooks/queries"
+import { useToast } from "../hooks/toast"
 import { getFileRawUrl, type File } from "../api"
 
 function formatBytes(bytes: number): string {
@@ -59,17 +60,27 @@ export function FileDetailPage({ id }: { id?: string }) {
 }
 
 function MetadataSection({ file }: { file: File }) {
+  const toast = useToast()
   const extractMutation = useExtractFile()
 
-  const metaEntries: { label: string; value: string }[] = [
-    { label: "Name", value: file.name },
+  const handleExtract = async () => {
+    try {
+      await extractMutation.mutateAsync(file.id)
+      toast.show({ type: "success", message: "File queued for extraction" })
+    } catch (e: any) {
+      toast.show({ type: "error", message: e.message })
+    }
+  }
+
+  const metaEntries: { label: string, value: string }[] = [
     { label: "Path", value: file.path },
+    { label: "Extension", value: file.extension || "-" },
+    { label: "MIME Type", value: file.mime_type || "-" },
     { label: "Size", value: formatBytes(file.size) },
-    { label: "Type", value: file.mime_type || file.extension },
     { label: "Status", value: file.status },
-    { label: "Modified", value: formatTime(file.modified_at) },
-    { label: "Indexed", value: formatTime(file.indexed_at) },
-    { label: "Content Indexed", value: formatTime(file.content_indexed_at) },
+    { label: "Modified", value: file.modified_at ? new Date(file.modified_at).toLocaleString() : "-" },
+    { label: "Indexed", value: file.indexed_at ? new Date(file.indexed_at).toLocaleString() : "-" },
+    { label: "Content Indexed", value: file.content_indexed_at ? new Date(file.content_indexed_at).toLocaleString() : "-" },
     { label: "Processing", value: file.processing_status },
   ]
 
@@ -91,7 +102,7 @@ function MetadataSection({ file }: { file: File }) {
           <button
             class="btn btn-sm"
             disabled={extractMutation.isPending}
-            onClick={() => extractMutation.mutate(file.id)}
+            onClick={handleExtract}
           >
             {extractMutation.isPending ? "Queuing..." : "Extract"}
           </button>
@@ -193,26 +204,32 @@ function ExtractedContentPreview({ content, show, onToggle }: { content: string 
 }
 
 function CommentSection({ fileId, comment }: { fileId: number; comment: { content: string } | null }) {
+  const toast = useToast()
   const [text, setText] = useState(comment?.content || "")
   const [editing, setEditing] = useState(!comment)
   const upsertMutation = useUpsertComment()
   const deleteMutation = useDeleteComment()
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!text.trim()) return
-    upsertMutation.mutate(
-      { fileId, content: text },
-      { onSuccess: () => setEditing(false) }
-    )
+    try {
+      await upsertMutation.mutateAsync({ fileId, content: text })
+      setEditing(false)
+      toast.show({ type: "success", message: "Comment saved" })
+    } catch (e: any) {
+      toast.show({ type: "error", message: e.message })
+    }
   }
 
-  const handleDelete = () => {
-    deleteMutation.mutate(fileId, {
-      onSuccess: () => {
-        setText("")
-        setEditing(true)
-      },
-    })
+  const handleDelete = async () => {
+    try {
+      await deleteMutation.mutateAsync(fileId)
+      setText("")
+      setEditing(true)
+      toast.show({ type: "success", message: "Comment deleted" })
+    } catch (e: any) {
+      toast.show({ type: "error", message: e.message })
+    }
   }
 
   return (
