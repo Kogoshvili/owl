@@ -22,7 +22,7 @@ func setupFileHandler(t *testing.T) (*FileHandler, *sql.DB, int64) {
 
 	db.Exec("PRAGMA foreign_keys=ON")
 	db.Exec(`
-		CREATE TABLE watched_directories (id INTEGER PRIMARY KEY AUTOINCREMENT, path TEXT NOT NULL UNIQUE, recursive INTEGER DEFAULT 1, enabled INTEGER DEFAULT 1, last_scanned_at DATETIME, created_at DATETIME DEFAULT CURRENT_TIMESTAMP);
+		CREATE TABLE watched_directories (id INTEGER PRIMARY KEY AUTOINCREMENT, path TEXT NOT NULL UNIQUE, enabled INTEGER DEFAULT 1, last_scanned_at DATETIME, created_at DATETIME DEFAULT CURRENT_TIMESTAMP);
 		CREATE TABLE files (id INTEGER PRIMARY KEY AUTOINCREMENT, path TEXT NOT NULL UNIQUE, name TEXT NOT NULL, extension TEXT NOT NULL DEFAULT '', mime_type TEXT NOT NULL DEFAULT '', size INTEGER DEFAULT 0, parent_dir TEXT NOT NULL, watched_dir_id INTEGER REFERENCES watched_directories(id) ON DELETE CASCADE, status TEXT DEFAULT 'active', modified_at DATETIME, indexed_at DATETIME, content_indexed_at DATETIME, processing_status TEXT DEFAULT 'unprocessed', processing_error TEXT, file_metadata TEXT);
 		CREATE TABLE comments (file_id INTEGER PRIMARY KEY REFERENCES files(id) ON DELETE CASCADE, content TEXT NOT NULL DEFAULT '', updated_at DATETIME DEFAULT CURRENT_TIMESTAMP);
 	`)

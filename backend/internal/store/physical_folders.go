@@ -47,14 +47,14 @@ func (s *Store) ListPhysicalFolders(watchedDirID int64) ([]*PhysicalFolder, erro
 	}
 
 	var watchedDir *WatchedDir
-	wdRows, err := s.db.Query(`SELECT id, path, recursive, enabled, last_scanned_at, created_at FROM watched_directories WHERE id = ?`, watchedDirID)
+	wdRows, err := s.db.Query(`SELECT id, path, enabled, last_scanned_at, created_at FROM watched_directories WHERE id = ?`, watchedDirID)
 	if err != nil {
 		return nil, err
 	}
 	defer wdRows.Close()
 	if wdRows.Next() {
 		var wd WatchedDir
-		if err := wdRows.Scan(&wd.ID, &wd.Path, &wd.Recursive, &wd.Enabled, &wd.LastScannedAt, &wd.CreatedAt); err != nil {
+		if err := wdRows.Scan(&wd.ID, &wd.Path, &wd.Enabled, &wd.LastScannedAt, &wd.CreatedAt); err != nil {
 			return nil, err
 		}
 		watchedDir = &wd
@@ -137,7 +137,7 @@ func (s *Store) ListPhysicalFolders(watchedDirID int64) ([]*PhysicalFolder, erro
 }
 
 func (s *Store) ListPhysicalFoldersAll() ([]*PhysicalFolder, error) {
-	wdRows, err := s.db.Query(`SELECT id, path, recursive, enabled, last_scanned_at, created_at FROM watched_directories ORDER BY created_at`)
+	wdRows, err := s.db.Query(`SELECT id, path, enabled, last_scanned_at, created_at FROM watched_directories ORDER BY created_at`)
 	if err != nil {
 		return nil, err
 	}
@@ -146,7 +146,7 @@ func (s *Store) ListPhysicalFoldersAll() ([]*PhysicalFolder, error) {
 	var watchedDirs []WatchedDir
 	for wdRows.Next() {
 		var wd WatchedDir
-		if err := wdRows.Scan(&wd.ID, &wd.Path, &wd.Recursive, &wd.Enabled, &wd.LastScannedAt, &wd.CreatedAt); err != nil {
+		if err := wdRows.Scan(&wd.ID, &wd.Path, &wd.Enabled, &wd.LastScannedAt, &wd.CreatedAt); err != nil {
 			return nil, err
 		}
 		watchedDirs = append(watchedDirs, wd)

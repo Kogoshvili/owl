@@ -22,7 +22,6 @@ func openTestDB(t *testing.T) *sql.DB {
 	CREATE TABLE IF NOT EXISTS watched_directories (
 		id INTEGER PRIMARY KEY AUTOINCREMENT,
 		path TEXT NOT NULL UNIQUE,
-		recursive INTEGER NOT NULL DEFAULT 1,
 		enabled INTEGER NOT NULL DEFAULT 1,
 		last_scanned_at DATETIME,
 		created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP

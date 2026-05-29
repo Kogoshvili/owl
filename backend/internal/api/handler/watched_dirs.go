@@ -22,13 +22,11 @@ func NewWatchedDirHandler(s *store.Store, sc *scanner.Scanner, ext *extractor.Ex
 }
 
 type createWatchedDirRequest struct {
-	Path      string `json:"path"`
-	Recursive *bool  `json:"recursive"`
+	Path string `json:"path"`
 }
 
 type updateWatchedDirRequest struct {
-	Enabled   *bool `json:"enabled"`
-	Recursive *bool `json:"recursive"`
+	Enabled *bool `json:"enabled"`
 }
 
 func (h *WatchedDirHandler) List(w http.ResponseWriter, r *http.Request) {
@@ -53,19 +51,15 @@ func (h *WatchedDirHandler) Create(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "path is required")
 		return
 	}
-	recursive := true
-	if req.Recursive != nil {
-		recursive = *req.Recursive
-	}
 
-	dir, err := h.store.CreateWatchedDir(req.Path, recursive)
+	dir, err := h.store.CreateWatchedDir(req.Path)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
 
 	slog.Info("starting background scan", "dir", dir.Path, "dir_id", dir.ID)
-	go h.scanner.Scan(context.Background(), dir.Path, dir.Recursive, dir.ID)
+	go h.scanner.Scan(context.Background(), dir.Path, dir.ID)
 
 	writeJSON(w, http.StatusCreated, dir)
 }
@@ -82,7 +76,7 @@ func (h *WatchedDirHandler) Update(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	dir, err := h.store.UpdateWatchedDir(id, req.Enabled, req.Recursive)
+	dir, err := h.store.UpdateWatchedDir(id, req.Enabled)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
@@ -124,7 +118,7 @@ func (h *WatchedDirHandler) Scan(w http.ResponseWriter, r *http.Request) {
 	}
 
 	slog.Info("starting background scan", "dir", dir.Path, "dir_id", dir.ID)
-	go h.scanner.Scan(context.Background(), dir.Path, dir.Recursive, dir.ID)
+	go h.scanner.Scan(context.Background(), dir.Path, dir.ID)
 
 	writeJSON(w, http.StatusAccepted, dir)
 }

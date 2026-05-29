@@ -1,0 +1,1 @@
+ALTER TABLE watched_directories ADD COLUMN recursive INTEGER NOT NULL DEFAULT 1;

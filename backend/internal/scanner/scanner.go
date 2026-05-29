@@ -20,9 +20,9 @@ func New(s *store.Store) *Scanner {
 	return &Scanner{store: s}
 }
 
-func (sc *Scanner) Scan(ctx context.Context, dirPath string, recursive bool, watchedDirID int64) error {
+func (sc *Scanner) Scan(ctx context.Context, dirPath string, watchedDirID int64) error {
 	start := time.Now()
-	slog.Info("scanner: starting", "dir", dirPath, "recursive", recursive)
+	slog.Info("scanner: starting", "dir", dirPath)
 
 	var seenPaths []string
 	var parentDirs = map[string]bool{}
@@ -38,7 +38,7 @@ func (sc *Scanner) Scan(ctx context.Context, dirPath string, recursive bool, wat
 		}
 
 		if d.IsDir() {
-			if path != dirPath && (!recursive || isHidden(d.Name())) {
+			if path != dirPath && isHidden(d.Name()) {
 				return fs.SkipDir
 			}
 			return nil

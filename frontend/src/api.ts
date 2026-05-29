@@ -1,7 +1,6 @@
 export interface WatchedDir {
   id: number
   path: string
-  recursive: boolean
   enabled: boolean
   last_scanned_at: string | null
   created_at: string
@@ -57,11 +56,11 @@ export function getWatchedDirs(): Promise<WatchedDir[]> {
   return request<WatchedDir[]>("/watched-directories")
 }
 
-export function addWatchedDir(path: string, recursive = true): Promise<WatchedDir> {
+export function addWatchedDir(path: string): Promise<WatchedDir> {
   return request<WatchedDir>("/watched-directories", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ path, recursive }),
+    body: JSON.stringify({ path }),
   })
 }
 

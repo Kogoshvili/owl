@@ -105,7 +105,6 @@ export function WatchedDirs({ dirs, selectedDirId, loading, addMutation, scanMut
           >
             <div class="dir-card-header">
               <span class="dir-path" title={dir.path}>{dir.path}</span>
-              {dir.recursive && <span class="badge">recursive</span>}
             </div>
             <div class="dir-card-meta">
               <span class="dir-scanned">{formatTime(dir.last_scanned_at)}</span>
@@ -116,7 +115,7 @@ export function WatchedDirs({ dirs, selectedDirId, loading, addMutation, scanMut
                 disabled={scanMutation.isPending}
                 onClick={(e) => { e.stopPropagation(); handleScan(dir.id) }}
               >
-                Scan
+                Rescan
               </button>
               <button
                 class="btn btn-sm"
