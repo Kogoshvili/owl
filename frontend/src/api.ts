@@ -163,8 +163,6 @@ export interface FolderSuggestion {
   description: string
   suggestion_type: string
   confidence: number
-  materialized_at: string | null
-  materialized_path: string
   created_at: string
 }
 
@@ -174,8 +172,6 @@ export interface FolderSuggestionDetail {
   description: string
   suggestion_type: string
   confidence: number
-  materialized_at: string | null
-  materialized_path: string
   created_at: string
   files: File[]
 }
@@ -187,11 +183,11 @@ export interface MaterializeResult {
   failed: string[]
 }
 
-export function acceptSuggestion(id: number, destination?: string): Promise<MaterializeResult> {
+export function acceptSuggestion(id: number, destination?: string, name?: string): Promise<MaterializeResult> {
   return request<MaterializeResult>(`/suggestions/${id}/materialize`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ destination: destination || "" }),
+    body: JSON.stringify({ destination: destination || "", name: name || "" }),
   })
 }
 
@@ -249,8 +245,6 @@ export interface FolderSuggestionDisplay {
   description: string
   suggestion_type: string
   confidence: number
-  materialized_at: string | null
-  materialized_path: string
   file_count: number
   preview: string[]
   created_at: string

@@ -158,6 +158,7 @@ func (h *SuggestionHandler) RemoveFile(w http.ResponseWriter, r *http.Request) {
 
 type materializeRequest struct {
 	Destination string `json:"destination"`
+	Name        string `json:"name"`
 }
 
 func (h *SuggestionHandler) Materialize(w http.ResponseWriter, r *http.Request) {
@@ -176,7 +177,7 @@ func (h *SuggestionHandler) Materialize(w http.ResponseWriter, r *http.Request) 
 		req.Destination = filepath.Join(home, "Owl-organized")
 	}
 
-	result, err := h.store.MaterializeSuggestion(id, req.Destination)
+	result, err := h.store.MaterializeSuggestion(id, req.Destination, req.Name)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return

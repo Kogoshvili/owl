@@ -1,5 +1,6 @@
 import { useState, useEffect } from "preact/hooks"
-import { type File as OwlFile, type PhysicalFolder } from "../api"
+import { type File as OwlFile, type PhysicalFolder, type WatchedDir } from "../api"
+import type { UseMutationResult } from "@tanstack/preact-query"
 import { useFileExtensions, useExtractFile, usePhysicalFolders, useFolderGuards, useSetFolderGuard } from "../hooks/queries"
 import { useToast } from "../hooks/toast"
 import { listPhysicalFolderFiles } from "../api"
@@ -13,7 +14,12 @@ export interface FileTreeFilterState {
 
 const PROCESSING_STATUSES = ["unprocessed", "queued", "processing", "processed", "stale", "failed"] as const
 
-export function FileTree() {
+export function FileTree({ dirs, addMutation, scanMutation, deleteMutation }: {
+  dirs: WatchedDir[]
+  addMutation: UseMutationResult<WatchedDir, Error, string>
+  scanMutation: UseMutationResult<WatchedDir, Error, number>
+  deleteMutation: UseMutationResult<void, Error, number>
+}) {
   const toast = useToast()
   const physicalFoldersQuery = usePhysicalFolders()
   const folderGuardsQuery = useFolderGuards()
@@ -22,7 +28,10 @@ export function FileTree() {
   const extractMutation = useExtractFile()
 
   const [filters, setFilters] = useState<FileTreeFilterState>({})
+  const [showFiles, setShowFiles] = useState(false)
   const [refreshKey, setRefreshKey] = useState(0)
+  const [addPath, setAddPath] = useState("")
+  const [addError, setAddError] = useState("")
 
   const guardMap = folderGuardsQuery.data ? folderGuardsQuery.data.reduce((acc, g) => {
     acc[g.path] = g.guarded
@@ -42,12 +51,47 @@ export function FileTree() {
     }
   }
 
+  const handleAdd = async () => {
+    const p = addPath.trim()
+    if (!p) return
+    setAddError("")
+    try {
+      await addMutation.mutateAsync(p)
+      setAddPath("")
+    } catch (e: any) {
+      setAddError(e.message)
+    }
+  }
+
+  const handleKeyDown = (e: KeyboardEvent) => {
+    if (e.key === "Enter") handleAdd()
+  }
+
+  const findWatchedDir = (folderPath: string): WatchedDir | undefined => {
+    const normalized = folderPath.replace(/[\\/]+$/, "").replace(/\\/g, "/")
+    return dirs.find(d => d.path.replace(/[\\/]+$/, "").replace(/\\/g, "/") === normalized)
+  }
+
   return (
     <div class="file-tree">
-      <div class="file-list-header">
-        <h2>Files</h2>
-        <button class="btn" onClick={() => { physicalFoldersQuery.refetch(); folderGuardsQuery.refetch(); setRefreshKey(n => n + 1) }}>Refresh</button>
+      <div class="add-dir-form">
+        <input
+          type="text"
+          placeholder="/path/to/directory"
+          value={addPath}
+          onInput={(e) => setAddPath((e.target as HTMLInputElement).value)}
+          onKeyDown={handleKeyDown}
+          disabled={addMutation.isPending}
+        />
+        <button class="btn btn-primary" onClick={handleAdd} disabled={addMutation.isPending || !addPath.trim()}>
+          {addMutation.isPending ? "..." : "Add"}
+        </button>
+        <button class="btn" disabled title="Requires Tauri desktop app">
+          Browse
+        </button>
       </div>
+
+      {addError && <div class="error-msg">{addError}</div>}
 
       <div class="file-filter-bar">
         <select
@@ -81,33 +125,49 @@ export function FileTree() {
         <button class="btn btn-sm" onClick={() => setFilters({})}>
           Clear
         </button>
+        <button
+          class={`btn btn-sm${showFiles ? " btn-primary" : ""}`}
+          onClick={() => setShowFiles(!showFiles)}
+          style="margin-left:auto"
+        >
+          {showFiles ? "Hide files" : "Show files"}
+        </button>
+        <button class="btn btn-sm" onClick={() => { physicalFoldersQuery.refetch(); folderGuardsQuery.refetch(); setRefreshKey(n => n + 1) }}>
+          Refresh
+        </button>
       </div>
 
-      {physicalFoldersQuery.isLoading ? (
-        <div class="empty">Loading...</div>
-      ) : physicalFoldersQuery.data && physicalFoldersQuery.data.length > 0 ? (
-        <div class="folder-tree">
-          {physicalFoldersQuery.data.map((root) => (
-            <FileTreeFolderNode
-              key={root.path}
-              folder={root}
-              depth={0}
-              filters={filters}
-              guardMap={guardMap}
-              onToggleGuard={handleToggleGuard}
-              onExtract={handleExtract}
-              refreshKey={refreshKey}
-            />
-          ))}
-        </div>
-      ) : (
-        <div class="empty">No folders found</div>
-      )}
+      <div class="folder-tree-scroll">
+        {physicalFoldersQuery.isLoading ? (
+          <div class="empty">Loading...</div>
+        ) : physicalFoldersQuery.data && physicalFoldersQuery.data.length > 0 ? (
+          <div class="folder-tree">
+            {physicalFoldersQuery.data.map((root) => (
+              <FileTreeFolderNode
+                key={root.path}
+                folder={root}
+                depth={0}
+                filters={filters}
+                guardMap={guardMap}
+                onToggleGuard={handleToggleGuard}
+                onExtract={handleExtract}
+                refreshKey={refreshKey}
+                showFiles={showFiles}
+                scanMutation={scanMutation}
+                deleteMutation={deleteMutation}
+                findWatchedDir={findWatchedDir}
+              />
+            ))}
+          </div>
+        ) : (
+          <div class="empty">No folders found</div>
+        )}
+      </div>
     </div>
   )
 }
 
-function FileTreeFolderNode({ folder, depth, filters, guardMap, onToggleGuard, onExtract, refreshKey }: {
+function FileTreeFolderNode({ folder, depth, filters, guardMap, onToggleGuard, onExtract, refreshKey, showFiles, scanMutation, deleteMutation, findWatchedDir }: {
   folder: PhysicalFolder
   depth: number
   filters: FileTreeFilterState
@@ -115,18 +175,22 @@ function FileTreeFolderNode({ folder, depth, filters, guardMap, onToggleGuard, o
   onToggleGuard: (path: string, guarded: boolean) => void
   onExtract: (fileId: number) => void
   refreshKey: number
+  showFiles: boolean
+  scanMutation: UseMutationResult<WatchedDir, Error, number>
+  deleteMutation: UseMutationResult<void, Error, number>
+  findWatchedDir: (folderPath: string) => WatchedDir | undefined
 }) {
   const [expanded, setExpanded] = useState(false)
   const [files, setFiles] = useState<OwlFile[] | null>(null)
   const [loadingFiles, setLoadingFiles] = useState(false)
   const hasChildren = folder.children && folder.children.length > 0
-  const canExpand = hasChildren || folder.file_count > 0
+  const canExpand = hasChildren || (showFiles && folder.file_count > 0)
   const isGuarded = guardMap?.[folder.path]
 
   const filteredFiles = files ? applyFileFilters(files, filters) : null
 
   useEffect(() => {
-    if (expanded && (files === null || refreshKey > 0) && folder.file_count > 0 && !loadingFiles) {
+    if (expanded && showFiles && (files === null || refreshKey > 0) && folder.file_count > 0 && !loadingFiles) {
       setLoadingFiles(true)
       listPhysicalFolderFiles(folder.path).then((res) => {
         setFiles(res.files)
@@ -136,7 +200,7 @@ function FileTreeFolderNode({ folder, depth, filters, guardMap, onToggleGuard, o
         setLoadingFiles(false)
       })
     }
-  }, [expanded, folder.path, folder.file_count, refreshKey])
+  }, [expanded, showFiles, folder.path, folder.file_count, refreshKey])
 
   const toggleExpanded = () => {
     if (canExpand) setExpanded(!expanded)
@@ -145,6 +209,18 @@ function FileTreeFolderNode({ folder, depth, filters, guardMap, onToggleGuard, o
   const toggleGuard = (e: MouseEvent) => {
     e.stopPropagation()
     onToggleGuard(folder.path, !isGuarded)
+  }
+
+  const watched = depth === 0 ? findWatchedDir(folder.path) : undefined
+
+  const handleScan = (e: MouseEvent) => {
+    e.stopPropagation()
+    if (watched) scanMutation.mutate(watched.id)
+  }
+
+  const handleDelete = (e: MouseEvent) => {
+    e.stopPropagation()
+    if (watched) deleteMutation.mutate(watched.id)
   }
 
   return (
@@ -157,7 +233,7 @@ function FileTreeFolderNode({ folder, depth, filters, guardMap, onToggleGuard, o
         <span class={`folder-tree-toggle ${canExpand ? "" : "invisible"}`}>
           {expanded ? "▾" : "▸"}
         </span>
-        <span class="folder-tree-icon">{canExpand ? (expanded ? "📂" : "📁") : "📄"}</span>
+        <span class="folder-tree-icon">{expanded ? "📂" : "📁"}</span>
         <span class="folder-tree-name">{folder.name}</span>
         {folder.file_count > 0 && (
           <span class="folder-tree-count">({folder.file_count})</span>
@@ -169,6 +245,16 @@ function FileTreeFolderNode({ folder, depth, filters, guardMap, onToggleGuard, o
         >
           {isGuarded ? "🔒" : "🔓"}
         </span>
+        {watched && (
+          <div class="dir-card-actions">
+            <button class="btn btn-sm" disabled={scanMutation.isPending} onClick={handleScan}>
+              Rescan
+            </button>
+            <button class="btn btn-sm btn-danger" disabled={deleteMutation.isPending} onClick={handleDelete}>
+              Delete
+            </button>
+          </div>
+        )}
       </div>
 
       {expanded && (
@@ -183,9 +269,13 @@ function FileTreeFolderNode({ folder, depth, filters, guardMap, onToggleGuard, o
               onToggleGuard={onToggleGuard}
               onExtract={onExtract}
               refreshKey={refreshKey}
+              showFiles={showFiles}
+              scanMutation={scanMutation}
+              deleteMutation={deleteMutation}
+              findWatchedDir={findWatchedDir}
             />
           ))}
-          {filteredFiles?.map((f) => (
+          {showFiles && filteredFiles?.map((f) => (
             <FileTreeFileRow key={f.id} file={f} depth={depth + 1} onExtract={onExtract} />
           ))}
           {loadingFiles && (

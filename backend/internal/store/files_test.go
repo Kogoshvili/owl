@@ -62,8 +62,6 @@ func openTestDB(t *testing.T) *sql.DB {
 		description TEXT NOT NULL DEFAULT '',
 		suggestion_type TEXT NOT NULL DEFAULT 'new_folder',
 		confidence REAL NOT NULL DEFAULT 0,
-		materialized_at DATETIME,
-		materialized_path TEXT NOT NULL DEFAULT '',
 		created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
 	);
 	CREATE TABLE IF NOT EXISTS folder_suggestion_files (

@@ -152,8 +152,8 @@ export function useProcessingStats() {
 export function useAcceptSuggestion() {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: ({ id, destination }: { id: number; destination?: string }) =>
-      acceptSuggestion(id, destination),
+    mutationFn: ({ id, destination, name }: { id: number; destination?: string; name?: string }) =>
+      acceptSuggestion(id, destination, name),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["suggestions"] })
       qc.invalidateQueries({ queryKey: ["folderSuggestions"] })

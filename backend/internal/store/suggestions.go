@@ -9,17 +9,15 @@ import (
 	"time"
 )
 
-const suggestionColumns = `id, name, description, suggestion_type, confidence, materialized_at, materialized_path, created_at`
+const suggestionColumns = `id, name, description, suggestion_type, confidence, created_at`
 
 type FolderSuggestion struct {
-	ID               int64      `json:"id"`
-	Name             string     `json:"name"`
-	Description      string     `json:"description"`
-	SuggestionType   string     `json:"suggestion_type"`
-	Confidence       float64    `json:"confidence"`
-	MaterializedAt   *time.Time `json:"materialized_at"`
-	MaterializedPath string     `json:"materialized_path"`
-	CreatedAt        time.Time  `json:"created_at"`
+	ID             int64     `json:"id"`
+	Name           string    `json:"name"`
+	Description    string    `json:"description"`
+	SuggestionType string    `json:"suggestion_type"`
+	Confidence     float64   `json:"confidence"`
+	CreatedAt      time.Time `json:"created_at"`
 }
 
 type FolderSuggestionDetail struct {
@@ -48,7 +46,7 @@ func (s *Store) ListSuggestions() ([]FolderSuggestion, error) {
 func (s *Store) GetSuggestion(id int64) (*FolderSuggestion, error) {
 	var sug FolderSuggestion
 	err := s.db.QueryRow(`SELECT `+suggestionColumns+` FROM folder_suggestions WHERE id = ?`, id).
-		Scan(&sug.ID, &sug.Name, &sug.Description, &sug.SuggestionType, &sug.Confidence, &sug.MaterializedAt, &sug.MaterializedPath, &sug.CreatedAt)
+		Scan(&sug.ID, &sug.Name, &sug.Description, &sug.SuggestionType, &sug.Confidence, &sug.CreatedAt)
 	if err == sql.ErrNoRows {
 		return nil, nil
 	}
@@ -56,7 +54,7 @@ func (s *Store) GetSuggestion(id int64) (*FolderSuggestion, error) {
 }
 
 func scanSuggestion(row interface{ Scan(...any) error }, sug *FolderSuggestion) error {
-	return row.Scan(&sug.ID, &sug.Name, &sug.Description, &sug.SuggestionType, &sug.Confidence, &sug.MaterializedAt, &sug.MaterializedPath, &sug.CreatedAt)
+	return row.Scan(&sug.ID, &sug.Name, &sug.Description, &sug.SuggestionType, &sug.Confidence, &sug.CreatedAt)
 }
 
 func (s *Store) CreateSuggestion(name, description, suggestionType string, confidence float64) (*FolderSuggestion, error) {
@@ -165,16 +163,13 @@ type MaterializeResult struct {
 	Failed       []string `json:"failed,omitempty"`
 }
 
-func (s *Store) MaterializeSuggestion(id int64, destBase string) (*MaterializeResult, error) {
+func (s *Store) MaterializeSuggestion(id int64, destBase string, folderName string) (*MaterializeResult, error) {
 	sug, err := s.GetSuggestion(id)
 	if err != nil {
 		return nil, fmt.Errorf("get suggestion: %w", err)
 	}
 	if sug == nil {
 		return nil, fmt.Errorf("suggestion not found")
-	}
-	if sug.MaterializedAt != nil {
-		return nil, fmt.Errorf("suggestion already materialized at %s", sug.MaterializedPath)
 	}
 
 	files, err := s.ListSuggestionFiles(id)
@@ -185,7 +180,11 @@ func (s *Store) MaterializeSuggestion(id int64, destBase string) (*MaterializeRe
 		return nil, fmt.Errorf("no files to materialize")
 	}
 
-	folderPath := filepath.Join(destBase, sanitizeDirName(sug.Name))
+	fname := sug.Name
+	if folderName != "" {
+		fname = folderName
+	}
+	folderPath := filepath.Join(destBase, sanitizeDirName(fname))
 	if err := os.MkdirAll(folderPath, 0755); err != nil {
 		return nil, fmt.Errorf("create directory: %w", err)
 	}
@@ -218,10 +217,8 @@ func (s *Store) MaterializeSuggestion(id int64, destBase string) (*MaterializeRe
 		result.Moved++
 	}
 
-	now := time.Now()
-	if _, err := s.db.Exec(`UPDATE folder_suggestions SET materialized_at = ?, materialized_path = ? WHERE id = ?`,
-		now, folderPath, id); err != nil {
-		return nil, fmt.Errorf("update suggestion: %w", err)
+	if err := s.DeleteSuggestion(id); err != nil {
+		return nil, fmt.Errorf("delete suggestion: %w", err)
 	}
 
 	return result, nil

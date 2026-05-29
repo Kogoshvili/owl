@@ -43,7 +43,7 @@ function SuggestionHeader({ suggestion, updateMutation, deleteMutation, refineMu
     try {
       await deleteMutation.mutateAsync(suggestion.id)
       toast.show({ type: "success", message: "Suggestion dismissed" })
-      route("/suggestions")
+      route("/")
     } catch (e: any) {
       toast.show({ type: "error", message: e.message })
     }
@@ -67,6 +67,7 @@ function SuggestionHeader({ suggestion, updateMutation, deleteMutation, refineMu
       await acceptMutation.mutateAsync({ id: suggestion.id, destination: acceptDest || undefined })
       setShowAccept(false)
       toast.show({ type: "success", message: "Files materialized" })
+      route("/")
     } catch (e: any) {
       toast.show({ type: "error", message: e.message })
     }
@@ -90,22 +91,16 @@ function SuggestionHeader({ suggestion, updateMutation, deleteMutation, refineMu
     <div class="folder-detail-header">
       <div class="folder-detail-title-row">
         <h2>{suggestion.name}</h2>
-        {suggestion.materialized_at && <span class="badge badge-materialized">Materialized</span>}
       </div>
       {suggestion.description && <p class="folder-detail-desc">{suggestion.description}</p>}
-      {suggestion.materialized_path && (
-        <p class="folder-detail-path">→ {suggestion.materialized_path}</p>
-      )}
       {suggestion.confidence > 0 && (
         <span class="badge badge-confidence">{Math.round(suggestion.confidence * 100)}%</span>
       )}
       <div class="folder-header-actions">
         <button class="btn btn-sm" onClick={() => setEditing(true)}>Edit</button>
-        {!suggestion.materialized_at && (
-          <button class="btn btn-sm btn-primary" onClick={() => setShowAccept(true)} disabled={acceptMutation.isPending}>
-            {acceptMutation.isPending ? "Moving..." : "Accept"}
-          </button>
-        )}
+        <button class="btn btn-sm btn-primary" onClick={() => setShowAccept(true)} disabled={acceptMutation.isPending}>
+          {acceptMutation.isPending ? "Moving..." : "Accept"}
+        </button>
         <button class="btn btn-sm btn-primary" onClick={handleRefine} disabled={refineMutation.isPending || !llmAvailable} title={!llmAvailable ? "Requires LLM" : ""}>
           {refineMutation.isPending ? "Refining..." : "Refine"}
         </button>
@@ -192,16 +187,14 @@ export function SuggestionDetailPage({ id }: { id: string }) {
           {llmQuery.isLoading && " Checking…"}
         </div>
       )}
-      <button class="btn btn-back" onClick={() => route("/suggestions")}>&larr; Back</button>
+      <button class="btn btn-back" onClick={() => route("/")}>&larr; Back</button>
 
       <SuggestionHeader suggestion={suggestion} updateMutation={updateMutation} deleteMutation={deleteMutation} refineMutation={refineMutation} acceptMutation={acceptMutation} llmAvailable={llmAvailable} />
 
       <div class="folder-section">
         <div class="folder-section-header">
           <h3>Files ({files.length})</h3>
-          {!suggestion.materialized_at && (
-            <button class="btn btn-primary btn-sm" onClick={() => setPickerOpen(true)}>Add Files</button>
-          )}
+          <button class="btn btn-primary btn-sm" onClick={() => setPickerOpen(true)}>Add Files</button>
         </div>
 
         {files.length === 0 ? (
@@ -225,15 +218,13 @@ export function SuggestionDetailPage({ id }: { id: string }) {
                   <td>{f.extension || "-"}</td>
                   <td>{formatBytes(f.size)}</td>
                   <td>
-                    {!suggestion.materialized_at && (
-                      <button
-                        class="btn btn-sm btn-danger"
-                        disabled={removeMutation.isPending}
-                        onClick={() => handleRemoveFile(f.id)}
-                      >
-                        Remove
-                      </button>
-                    )}
+                    <button
+                      class="btn btn-sm btn-danger"
+                      disabled={removeMutation.isPending}
+                      onClick={() => handleRemoveFile(f.id)}
+                    >
+                      Remove
+                    </button>
                   </td>
                 </tr>
               ))}
