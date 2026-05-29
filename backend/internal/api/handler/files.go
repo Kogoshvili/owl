@@ -57,6 +57,10 @@ func (h *FileHandler) List(w http.ResponseWriter, r *http.Request) {
 	if v := r.URL.Query().Get("processing_status"); v != "" {
 		f.ProcessingStatus = &v
 	}
+	if v := r.URL.Query().Get("supported"); v != "" {
+		b := v == "true"
+		f.Supported = &b
+	}
 	if v := r.URL.Query().Get("sort"); v != "" {
 		f.SortBy = v
 	}
@@ -188,6 +192,10 @@ func (h *FileHandler) ListByDir(w http.ResponseWriter, r *http.Request) {
 	}
 	if v := r.URL.Query().Get("processing_status"); v != "" {
 		f.ProcessingStatus = &v
+	}
+	if v := r.URL.Query().Get("supported"); v != "" {
+		b := v == "true"
+		f.Supported = &b
 	}
 	if v := r.URL.Query().Get("sort"); v != "" {
 		f.SortBy = v

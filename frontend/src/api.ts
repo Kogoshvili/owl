@@ -95,6 +95,7 @@ export interface FileListParams {
   extension?: string
   status?: string
   processing_status?: string
+  supported?: string
   sort?: string
   order?: string
   limit?: number
@@ -121,6 +122,7 @@ function buildFileParams(params?: FileListParams): string {
   if (params?.extension) p.set("extension", params.extension)
   if (params?.status) p.set("status", params.status)
   if (params?.processing_status) p.set("processing_status", params.processing_status)
+  if (params?.supported) p.set("supported", params.supported)
   if (params?.sort) p.set("sort", params.sort)
   if (params?.order) p.set("order", params.order)
   p.set("limit", String(params?.limit ?? 50))
@@ -464,22 +466,4 @@ export function refineTag(id: number): Promise<{meaningful: boolean, action: str
 }
 
 export function getUnprocessedCount(watchedDirId?: number): Promise<{count: number}> {
-  if (watchedDirId === undefined) {
-    return request<{count: number}>("/intelligence/files/unprocessed/count")
-  }
-  return request<{count: number}>(`/intelligence/files/unprocessed/count?watched_dir_id=${watchedDirId}`)
-}
-
-export interface GenerationStatus {
-  active: boolean
-  stage?: string
-  message?: string
-  progress?: number
-  total?: number
-  started_at?: string
-  completed_at?: string
-}
-
-export function getGenerationStatus(): Promise<GenerationStatus> {
-  return request<GenerationStatus>("/intelligence/folders/suggestions/status")
 }

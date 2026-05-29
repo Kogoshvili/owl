@@ -1,5 +1,6 @@
-import { useState } from "preact/hooks"
-import type { PhysicalFolder } from "../api"
+import { useState, useEffect } from "preact/hooks"
+import type { PhysicalFolder, File as OwlFile } from "../api"
+import { listPhysicalFolderFiles } from "../api"
 
 interface Props {
   roots: PhysicalFolder[]
@@ -39,16 +40,29 @@ function FolderTreeNode({ folder, depth, onSelect, selectedPath, coherenceMap, g
   onToggleGuard?: (path: string, guarded: boolean) => void
 }) {
   const [expanded, setExpanded] = useState(depth < 2)
+  const [files, setFiles] = useState<OwlFile[] | null>(null)
+  const [loadingFiles, setLoadingFiles] = useState(false)
   const hasChildren = folder.children && folder.children.length > 0
   const isSelected = selectedPath === folder.path
   const coherence = coherenceMap?.[folder.path]
   const showCoherence = depth > 0 && coherence
   const isGuarded = guardMap?.[folder.path]
 
-  const toggleExpanded = () => {
-    if (hasChildren) {
-      setExpanded(!expanded)
+  useEffect(() => {
+    if (expanded && files === null && folder.file_count > 0 && !loadingFiles) {
+      setLoadingFiles(true)
+      listPhysicalFolderFiles(folder.path).then((res) => {
+        setFiles(res.files)
+      }).catch(() => {
+        setFiles([])
+      }).finally(() => {
+        setLoadingFiles(false)
+      })
     }
+  }, [expanded, files, folder.path, folder.file_count, loadingFiles])
+
+  const toggleExpanded = () => {
+    setExpanded(!expanded)
   }
 
   const toggleGuard = (e: MouseEvent) => {
@@ -88,9 +102,9 @@ function FolderTreeNode({ folder, depth, onSelect, selectedPath, coherenceMap, g
           </span>
         )}
       </div>
-      {expanded && hasChildren && (
+      {expanded && (
         <div class="folder-tree-children">
-          {folder.children!.map((child) => (
+          {hasChildren && folder.children!.map((child) => (
             <FolderTreeNode
               key={child.path}
               folder={child}
@@ -102,6 +116,20 @@ function FolderTreeNode({ folder, depth, onSelect, selectedPath, coherenceMap, g
               onToggleGuard={onToggleGuard}
             />
           ))}
+          {files?.map((f) => (
+            <div class="folder-tree-node" key={f.id}>
+              <div class="folder-tree-row" style={{ "--depth": String(depth + 1) } as any}>
+                <span class="folder-tree-toggle invisible">▸</span>
+                <span class="folder-tree-icon">📄</span>
+                <span class="folder-tree-name">{f.name}</span>
+              </div>
+            </div>
+          ))}
+          {loadingFiles && (
+            <div class="folder-tree-row" style={{ "--depth": String(depth + 1) } as any}>
+              <span class="folder-tree-name">Loading files...</span>
+            </div>
+          )}
         </div>
       )}
     </div>

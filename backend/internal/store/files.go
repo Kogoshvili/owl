@@ -47,6 +47,7 @@ type FileFilter struct {
 	ParentDir        *string
 	WatchedDirID     *int64
 	ProcessingStatus *string
+	Supported        *bool
 	SortBy           string
 	SortOrder        string
 	Limit            int
@@ -101,6 +102,14 @@ func (s *Store) buildFileWhere(f FileFilter) (string, []any) {
 	if f.ProcessingStatus != nil {
 		conditions = append(conditions, "processing_status = ?")
 		args = append(args, *f.ProcessingStatus)
+	}
+	if f.Supported != nil {
+		supportedExts := "('txt','md','log','csv','json','xml','yaml','yml','toml','ini','cfg','conf','sh','bat','ps1','py','js','ts','go','rs','java','c','cpp','h','hpp','rb','php','sql','env','gitignore','html','htm','svg','css','scss','pdf','docx','xlsx','pptx')"
+		if *f.Supported {
+			conditions = append(conditions, "LOWER(extension) IN "+supportedExts)
+		} else {
+			conditions = append(conditions, "LOWER(extension) NOT IN "+supportedExts)
+		}
 	}
 
 	where := ""

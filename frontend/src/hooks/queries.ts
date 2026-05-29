@@ -28,7 +28,6 @@ import {
   listPhysicalFolders,
   listFolderGuards,
   setFolderGuard,
-  getGenerationStatus,
   tagFile,
   tagFiles,
   tagWatchedDir,
@@ -64,6 +63,7 @@ export function useAllFiles(filters?: FilterState) {
     queryFn: () => getAllFiles({
       extension: filters?.extension,
       processing_status: filters?.processing_status,
+      supported: filters?.supported,
       sort: filters?.sort,
       order: filters?.order,
       limit,
@@ -81,6 +81,7 @@ export function useFilesByDir(dirId: number | null, filters?: FilterState) {
     queryFn: () => getFilesByDir(dirId!, {
       extension: filters?.extension,
       processing_status: filters?.processing_status,
+      supported: filters?.supported,
       sort: filters?.sort,
       order: filters?.order,
       limit,
@@ -461,14 +462,6 @@ export function useUnprocessedCount() {
   return useQuery({
     queryKey: ["unprocessedCount"],
     queryFn: () => getUnprocessedCount(),
-  })
-}
-
-export function useGenerationStatus() {
-  return useQuery({
-    queryKey: ["generationStatus"],
-    queryFn: getGenerationStatus,
-    refetchInterval: 2000,
   })
 }
 

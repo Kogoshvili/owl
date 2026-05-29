@@ -1,5 +1,5 @@
 import { useState } from "preact/hooks"
-import { useFolderSuggestions, useGenerateFolderSuggestions, useAcceptFolderSuggestion, useDismissFolderSuggestion, useRefineFolder, useRefineAllFolderSuggestions, useGenerationStatus } from "../hooks/queries"
+import { useFolderSuggestions, useGenerateFolderSuggestions, useAcceptFolderSuggestion, useDismissFolderSuggestion, useRefineFolder, useRefineAllFolderSuggestions } from "../hooks/queries"
 import { route } from "preact-router"
 import type { FolderSuggestion } from "../api"
 
@@ -10,12 +10,10 @@ export function FolderSuggestions() {
   const dismissMutation = useDismissFolderSuggestion()
   const refineMutation = useRefineFolder()
   const refineAllMutation = useRefineAllFolderSuggestions()
-  const statusQuery = useGenerationStatus()
   const [generating, setGenerating] = useState(false)
   const [refiningId, setRefiningId] = useState<number | null>(null)
 
   const suggestions = suggestionsQuery.data ? Object.values(suggestionsQuery.data) : []
-  const status = statusQuery.data
 
   const handleGenerate = async () => {
     setGenerating(true)
@@ -93,9 +91,9 @@ export function FolderSuggestions() {
           <button
             class="btn btn-sm btn-primary"
             onClick={handleGenerate}
-            disabled={generating || status?.active}
+            disabled={generating}
           >
-            {status?.active ? `Generating: ${status.message}` : (generating ? "Generating..." : "Generate")}
+            {generating ? "Generating..." : "Generate"}
           </button>
           {suggestions.length > 0 && (
             <>
@@ -111,14 +109,6 @@ export function FolderSuggestions() {
             </>
           )}
         </div>
-        {status?.active && status.total !== undefined && (
-          <div class="generation-progress">
-            <div class="progress-bar">
-              <div class="progress-fill" style={`width: ${((status.progress || 0) / status.total) * 100}%`}></div>
-            </div>
-            <div class="progress-text">{status.progress || 0} / {status.total}</div>
-          </div>
-        )}
       </div>
 
       {suggestionsQuery.isLoading && <div class="empty">Loading...</div>}

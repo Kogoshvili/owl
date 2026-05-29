@@ -5,6 +5,7 @@ import { route } from "preact-router"
 export interface FilterState {
   extension?: string
   processing_status?: string
+  supported?: string
   sort: string
   order: string
   page: number
@@ -119,9 +120,19 @@ export function FileList({ data, loading, dirName, filters, onFilterChange, onRe
           {PROCESSING_STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
         </select>
 
+        <select
+          class="filter-select"
+          value={filters.supported ?? ""}
+          onChange={(e) => onFilterChange({ ...filters, supported: (e.target as HTMLSelectElement).value || undefined, page: 1 })}
+        >
+          <option value="">All files</option>
+          <option value="true">Supported only</option>
+          <option value="false">Unsupported only</option>
+        </select>
+
         <button
           class="btn btn-sm"
-          onClick={() => onFilterChange({ extension: undefined, processing_status: undefined, sort: "indexed_at", order: "desc", page: 1, limit: filters.limit })}
+          onClick={() => onFilterChange({ extension: undefined, processing_status: undefined, supported: undefined, sort: "indexed_at", order: "desc", page: 1, limit: filters.limit })}
         >
           Clear
         </button>
