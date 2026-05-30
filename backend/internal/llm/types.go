@@ -15,11 +15,6 @@ type RefinementResult struct {
 	Description string
 }
 
-type KeywordExtraction struct {
-	FileID   int64
-	Keywords []string
-}
-
 type FolderClassification struct {
 	Related bool
 	Reason  string

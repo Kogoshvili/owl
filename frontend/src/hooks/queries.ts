@@ -2,21 +2,16 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/preact-query"
 import {
   getWatchedDirs,
   getAllFiles,
-  getFilesByDir,
   addWatchedDir,
   scanDir,
   deleteDir,
-  extractDir,
   extractFile,
-  getUnprocessedCount,
   getProcessingStats,
   getFileDetail,
   upsertComment,
   deleteComment,
   getFileExtensions,
-  listSuggestions,
   getSuggestionDetail,
-  createSuggestion,
   updateSuggestion,
   deleteSuggestion,
   addFilesToSuggestion,
@@ -30,7 +25,6 @@ import {
   dismissSuggestion,
   refineSuggestion,
   refineAllSuggestions,
-  listStrategies,
   runGuard,
   extractOrphans,
   getGuardStatus,
@@ -80,14 +74,6 @@ export function useDeleteDir() {
   })
 }
 
-export function useExtractDir() {
-  const qc = useQueryClient()
-  return useMutation({
-    mutationFn: (id: number) => extractDir(id),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["watchedDirs"] }),
-  })
-}
-
 export function useExtractFile() {
   const qc = useQueryClient()
   return useMutation({
@@ -120,21 +106,15 @@ export function useAllFiles(filters?: FileListFilterState) {
   })
 }
 
-export function useFilesByDir(dirId: number | null, filters?: FileListFilterState) {
-  const limit = filters?.limit ?? 50
-  const offset = (filters?.page ?? 1) > 1 ? ((filters?.page ?? 1) - 1) * limit : 0
-  return useQuery({
-    queryKey: ["files", "dir", dirId, filters],
-    queryFn: () => getFilesByDir(dirId!, {
-      extension: filters?.extension,
-      processing_status: filters?.processing_status,
-      supported: filters?.supported,
-      sort: filters?.sort,
-      order: filters?.order,
-      limit,
-      offset,
-    }),
-    enabled: dirId !== null,
+export function useSetFolderGuard() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ({ path, guarded }: { path: string; guarded: boolean }) =>
+      setFolderGuard(path, guarded),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["folderGuards"] })
+      queryClient.invalidateQueries({ queryKey: ["physicalFolders"] })
+    },
   })
 }
 
@@ -142,13 +122,6 @@ export function usePhysicalFolders() {
   return useQuery({
     queryKey: ["physicalFolders"],
     queryFn: () => listPhysicalFolders(),
-  })
-}
-
-export function useUnprocessedCount() {
-  return useQuery({
-    queryKey: ["unprocessedCount"],
-    queryFn: () => getUnprocessedCount(),
   })
 }
 
@@ -203,34 +176,6 @@ export function useFolderGuards() {
   return useQuery({
     queryKey: ["folderGuards"],
     queryFn: listFolderGuards,
-  })
-}
-
-export function useSetFolderGuard() {
-  const queryClient = useQueryClient()
-  return useMutation({
-    mutationFn: ({ path, guarded }: { path: string; guarded: boolean }) =>
-      setFolderGuard(path, guarded),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["folderGuards"] })
-      queryClient.invalidateQueries({ queryKey: ["physicalFolders"] })
-    },
-  })
-}
-
-export function useSuggestions() {
-  return useQuery({
-    queryKey: ["suggestions"],
-    queryFn: listSuggestions,
-  })
-}
-
-export function useCreateSuggestion() {
-  const qc = useQueryClient()
-  return useMutation({
-    mutationFn: ({ name, description }: { name: string; description: string }) =>
-      createSuggestion(name, description),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["suggestions"] }),
   })
 }
 
@@ -331,7 +276,6 @@ export function useExtractOrphans() {
     mutationFn: () => extractOrphans(),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["extractStatus"] })
-      qc.invalidateQueries({ queryKey: ["unprocessedCount"] })
       qc.invalidateQueries({ queryKey: ["processingStats"] })
     },
   })

@@ -1,7 +1,6 @@
 package llm
 
 import (
-	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -19,21 +18,6 @@ func TestBuildClusterPrompt(t *testing.T) {
 	require.Contains(t, prompt, "/downloads")
 	require.Contains(t, prompt, `"related": true`)
 	require.Contains(t, prompt, `"name": "Specific Name"`)
-}
-
-func TestBuildKeywordExtractionPrompt(t *testing.T) {
-	files := []struct {
-		ID      int64
-		Name    string
-		Content string
-	}{
-		{ID: 1, Name: "doc.txt", Content: "the quick brown fox"},
-	}
-	prompt := buildKeywordExtractionPrompt(files)
-	require.Contains(t, prompt, "[id:1]")
-	require.Contains(t, prompt, "doc.txt")
-	require.Contains(t, prompt, "quick brown fox")
-	require.Contains(t, prompt, `"keywords": ["keyword1"`)
 }
 
 func TestParseClusterResponse(t *testing.T) {
@@ -58,7 +42,7 @@ func TestParseClusterResponse(t *testing.T) {
 		raw := `{"related": true, "removed": [1, 99], "name": "", "description": ""}`
 		result, err := parseClusterResponse(raw, []int64{100})
 		require.NoError(t, err)
-		require.Equal(t, []int64{100}, result.RemovedIDs) // 99 is out of bounds, skipped
+		require.Equal(t, []int64{100}, result.RemovedIDs)
 	})
 
 	t.Run("malformed JSON", func(t *testing.T) {
@@ -91,52 +75,11 @@ func TestParseFolderGuardResponse(t *testing.T) {
 	})
 }
 
-func TestParseKeywordExtractionResponse(t *testing.T) {
-	t.Run("valid JSON array", func(t *testing.T) {
-		raw := `[{"id": 1, "keywords": ["kw1", "kw2"]}, {"id": 2, "keywords": ["kw3"]}]`
-		result, err := parseKeywordExtractionResponse(raw)
-		require.NoError(t, err)
-		require.Len(t, result, 2)
-		require.Equal(t, int64(1), result[0].FileID)
-		require.Equal(t, []string{"kw1", "kw2"}, result[0].Keywords)
-		require.Equal(t, int64(2), result[1].FileID)
-		require.Equal(t, []string{"kw3"}, result[1].Keywords)
-	})
-
-	t.Run("with markdown fences", func(t *testing.T) {
-		raw := "```\n[{\"id\": 1, \"keywords\": [\"test\"]}]\n```"
-		result, err := parseKeywordExtractionResponse(raw)
-		require.NoError(t, err)
-		require.Len(t, result, 1)
-	})
-
-	t.Run("empty array", func(t *testing.T) {
-		result, err := parseKeywordExtractionResponse(`[]`)
-		require.NoError(t, err)
-		require.Empty(t, result)
-	})
-}
-
 func TestBuildFolderGuardPromptContentTruncation(t *testing.T) {
 	longNames := make([]string, 100)
 	for i := range longNames {
-		longNames[i] = strings.Repeat("a", 10)
+		longNames[i] = "aaaaaaaaaa"
 	}
 	prompt := buildFolderGuardPrompt("test", nil, longNames, "", false)
-	// Should not crash, should contain file names
 	require.Contains(t, prompt, `Folder: "test"`)
-}
-
-func TestBuildKeywordExtractionPromptContentTruncation(t *testing.T) {
-	files := []struct {
-		ID      int64
-		Name    string
-		Content string
-	}{
-		{ID: 1, Name: "long.txt", Content: strings.Repeat("x", 1000)},
-	}
-	prompt := buildKeywordExtractionPrompt(files)
-	// Content should be truncated to 500 chars
-	require.Contains(t, prompt, strings.Repeat("x", 500))
-	require.NotContains(t, prompt, strings.Repeat("x", 501))
 }

@@ -54,56 +54,6 @@ func parseClusterResponse(raw string, fileIDs []int64) (*RefinementResult, error
 	}, nil
 }
 
-func buildKeywordExtractionPrompt(files []struct {
-	ID      int64
-	Name    string
-	Content string
-}) string {
-	var fileStrings []string
-	for i, f := range files {
-		content := f.Content
-		if len(content) > 500 {
-			content = content[:500]
-		}
-		fileStrings = append(fileStrings, fmt.Sprintf("%d. [id:%d] %s\nContent: %s", i+1, f.ID, f.Name, content))
-	}
-
-	return `Extract keywords from each file. Be specific (not "file", "data", "document").
-
-Example:
-[{"id": 1, "keywords": ["quarterly report", "financial", "Q3 2024"]}]
-
-Files:
-` + strings.Join(fileStrings, "\n\n") + `
-
-Respond ONLY with valid JSON (no markdown):
-[{"id": 1, "keywords": ["keyword1", "keyword2", ...]}, ...]`
-}
-
-func parseKeywordExtractionResponse(raw string) ([]KeywordExtraction, error) {
-	raw = strings.TrimSpace(raw)
-	raw = strings.TrimPrefix(raw, "```json")
-	raw = strings.TrimPrefix(raw, "```")
-	raw = strings.TrimSuffix(raw, "```")
-
-	var result []struct {
-		ID       int64    `json:"id"`
-		Keywords []string `json:"keywords"`
-	}
-	if err := json.Unmarshal([]byte(raw), &result); err != nil {
-		return nil, err
-	}
-
-	extractions := make([]KeywordExtraction, len(result))
-	for i, r := range result {
-		extractions[i] = KeywordExtraction{
-			FileID:   r.ID,
-			Keywords: r.Keywords,
-		}
-	}
-	return extractions, nil
-}
-
 func buildFolderGuardPrompt(folderName string, subfolders []string, fileNames []string, parentName string, parentGuarded bool) string {
 	subfolderList := strings.Join(subfolders, ", ")
 	if subfolderList == "" {

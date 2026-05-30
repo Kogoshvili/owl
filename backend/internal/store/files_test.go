@@ -264,13 +264,6 @@ func TestStore_FolderGuard(t *testing.T) {
 		require.False(t, paths["/test/other"])
 	})
 
-	t.Run("is folder guarded with ancestor", func(t *testing.T) {
-		s.SetFolderGuard("/parent", true, "llm", "")
-		guarded, err := s.IsFolderGuarded("/parent/child")
-		require.NoError(t, err)
-		require.True(t, guarded)
-	})
-
 	t.Run("delete guard", func(t *testing.T) {
 		err := s.DeleteFolderGuard("/test/path")
 		require.NoError(t, err)

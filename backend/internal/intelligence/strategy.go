@@ -27,8 +27,6 @@ type FolderSuggestion struct {
 	Preview     []string
 }
 
-type ProgressFunc func(stage string, current, total int)
-
 type Strategy interface {
 	ID() StrategyID
 	DisplayName() string

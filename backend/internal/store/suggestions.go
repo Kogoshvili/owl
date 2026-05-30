@@ -86,11 +86,6 @@ func (s *Store) DeleteAllSuggestions() error {
 	return err
 }
 
-func (s *Store) AddFileToSuggestion(suggestionID, fileID int64) error {
-	_, err := s.db.Exec(`INSERT OR IGNORE INTO folder_suggestion_files (folder_suggestion_id, file_id) VALUES (?, ?)`, suggestionID, fileID)
-	return err
-}
-
 func (s *Store) AddFilesToSuggestion(suggestionID int64, fileIDs []int64) error {
 	tx, err := s.db.Begin()
 	if err != nil {

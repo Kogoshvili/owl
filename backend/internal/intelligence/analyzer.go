@@ -15,11 +15,6 @@ type Keyword struct {
 	Score float64
 }
 
-type FileKeywords struct {
-	FileID   int64
-	Keywords []Keyword
-}
-
 type Corpus struct {
 	Keywords   map[int64][]Keyword
 	KeywordMap map[int64]map[string]float64
@@ -302,54 +297,6 @@ func (a *Analyzer) BuildCorpusTFIDFWithFallback(fileIDs []int64) (map[int64][]Ke
 	slog.Info("build-corpus: complete", "files", totalDocs, "unique_terms", len(termDocFreq))
 
 	return result, nil
-}
-
-func (a *Analyzer) CalculateFileSimilarity(id1, id2 int64) (float64, error) {
-	keywords1, err := a.GetFileKeywords(id1, 50)
-	if err != nil {
-		return 0, err
-	}
-
-	keywords2, err := a.GetFileKeywords(id2, 50)
-	if err != nil {
-		return 0, err
-	}
-
-	terms1 := make(map[string]float64)
-	for _, kw := range keywords1 {
-		terms1[kw.Term] = kw.Score
-	}
-
-	terms2 := make(map[string]float64)
-	for _, kw := range keywords2 {
-		terms2[kw.Term] = kw.Score
-	}
-
-	if len(terms1) == 0 || len(terms2) == 0 {
-		return 0, nil
-	}
-
-	dotProduct := 0.0
-	norm1 := 0.0
-	norm2 := 0.0
-
-	for term, score1 := range terms1 {
-		score2, exists := terms2[term]
-		if exists {
-			dotProduct += score1 * score2
-		}
-		norm1 += score1 * score1
-	}
-
-	for _, score2 := range terms2 {
-		norm2 += score2 * score2
-	}
-
-	if norm1 == 0 || norm2 == 0 {
-		return 0, nil
-	}
-
-	return dotProduct / (math.Sqrt(norm1) * math.Sqrt(norm2)), nil
 }
 
 func (a *Analyzer) GetProcessedFiles(limit int) ([]int64, error) {

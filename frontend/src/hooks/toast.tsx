@@ -1,7 +1,7 @@
 import { createContext, type ComponentChildren } from "preact"
 import { useContext, useState, useCallback, useRef } from "preact/hooks"
 
-export interface Toast {
+interface Toast {
   id: number
   type: "success" | "error" | "info"
   message: string

@@ -1,2 +1,0 @@
--- SQLite does not support DROP COLUMN.
--- To revert, restore from backup or recreate the table without these columns.

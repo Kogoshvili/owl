@@ -2,8 +2,6 @@ package store
 
 import (
 	"database/sql"
-	"path/filepath"
-	"strings"
 )
 
 type FolderGuardClassification struct {
@@ -76,41 +74,3 @@ func (s *Store) GetGuardedPaths() (map[string]bool, error) {
 	return guarded, rows.Err()
 }
 
-func (s *Store) IsFolderGuarded(path string) (bool, error) {
-	path = filepath.ToSlash(path)
-	path = strings.TrimRight(path, "/")
-
-	guarded, source, err := s.GetFolderGuard(path)
-	if err != nil {
-		return false, err
-	}
-
-	if source == "user" {
-		return guarded, nil
-	}
-
-	rows, err := s.db.Query(`SELECT path FROM folder_guard_classifications WHERE guarded = 1`)
-	if err != nil {
-		return false, err
-	}
-	defer rows.Close()
-
-	for rows.Next() {
-		var guardedPath string
-		if err := rows.Scan(&guardedPath); err != nil {
-			return false, err
-		}
-		guardedPath = filepath.ToSlash(guardedPath)
-		guardedPath = strings.TrimRight(guardedPath, "/")
-
-		if path == guardedPath {
-			return true, nil
-		}
-
-		if strings.HasPrefix(path, guardedPath+"/") {
-			return true, nil
-		}
-	}
-
-	return false, nil
-}
