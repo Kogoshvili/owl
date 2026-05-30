@@ -1,6 +1,5 @@
 import { useState } from "preact/hooks"
-import { useAllFiles, useFileExtensions } from "../hooks/queries"
-import type { FileListFilterState } from "../api"
+import { useAllFiles } from "../hooks/queries"
 
 interface Props {
   existingFileIds: Set<number>
@@ -18,19 +17,13 @@ function formatBytes(bytes: number): string {
 }
 
 export function FilePickerDialog({ existingFileIds, onAdd, onClose, adding }: Props) {
-  const [filters, setFilters] = useState<FileListFilterState>({ sort: "name", order: "asc", page: 1, limit: 50 })
+  const [page, setPage] = useState(1)
   const [selected, setSelected] = useState<Set<number>>(new Set())
-  const [searchName, setSearchName] = useState("")
-  const filesQuery = useAllFiles(filters)
-  const extQuery = useFileExtensions()
+  const filesQuery = useAllFiles(page)
 
   const files = filesQuery.data?.files ?? []
   const total = filesQuery.data?.total ?? 0
-  const totalPages = Math.ceil(total / filters.limit)
-
-  const filteredFiles = searchName
-    ? files.filter((f) => f.name.toLowerCase().includes(searchName.toLowerCase()))
-    : files
+  const totalPages = Math.ceil(total / 50)
 
   const toggleSelect = (id: number) => {
     setSelected((prev) => {
@@ -42,7 +35,7 @@ export function FilePickerDialog({ existingFileIds, onAdd, onClose, adding }: Pr
   }
 
   const toggleAll = () => {
-    const selectableIds = filteredFiles.filter((f) => !existingFileIds.has(f.id)).map((f) => f.id)
+    const selectableIds = files.filter((f) => !existingFileIds.has(f.id)).map((f) => f.id)
     const allSelected = selectableIds.every((id) => selected.has(id))
     if (allSelected) {
       setSelected(new Set())
@@ -57,7 +50,7 @@ export function FilePickerDialog({ existingFileIds, onAdd, onClose, adding }: Pr
   }
 
   const handlePage = (delta: number) => {
-    setFilters({ ...filters, page: filters.page + delta })
+    setPage(page + delta)
   }
 
   return (
@@ -68,36 +61,16 @@ export function FilePickerDialog({ existingFileIds, onAdd, onClose, adding }: Pr
           <button class="btn btn-sm" onClick={onClose}>Close</button>
         </div>
 
-        <div class="dialog-filters">
-          <input
-            type="text"
-            placeholder="Search by name..."
-            value={searchName}
-            onInput={(e) => setSearchName((e.target as HTMLInputElement).value)}
-            class="picker-search"
-          />
-          <select
-            class="filter-select"
-            value={filters.extension || ""}
-            onChange={(e) => setFilters({ ...filters, extension: (e.target as HTMLSelectElement).value || undefined, page: 1 })}
-          >
-            <option value="">All extensions</option>
-            {(extQuery.data ?? []).map((ext) => (
-              <option key={ext} value={ext}>.{ext}</option>
-            ))}
-          </select>
-        </div>
-
         <div class="dialog-toolbar">
           <button class="btn btn-sm" onClick={toggleAll}>
-            {filteredFiles.filter((f) => !existingFileIds.has(f.id)).every((f) => selected.has(f.id)) && filteredFiles.length > 0 ? "Deselect All" : "Select All"}
+            {files.filter((f) => !existingFileIds.has(f.id)).every((f) => selected.has(f.id)) && files.length > 0 ? "Deselect All" : "Select All"}
           </button>
           <span class="picker-count">{selected.size} selected</span>
         </div>
 
         <div class="dialog-body">
           {filesQuery.isLoading && <div class="empty">Loading...</div>}
-          {!filesQuery.isLoading && filteredFiles.length === 0 && <div class="empty">No files found</div>}
+          {!filesQuery.isLoading && files.length === 0 && <div class="empty">No files found</div>}
           <table class="picker-table">
             <thead>
               <tr>
@@ -108,7 +81,7 @@ export function FilePickerDialog({ existingFileIds, onAdd, onClose, adding }: Pr
               </tr>
             </thead>
             <tbody>
-              {filteredFiles.map((f) => {
+              {files.map((f) => {
                 const isExisting = existingFileIds.has(f.id)
                 return (
                   <tr key={f.id} class={isExisting ? "row-existing" : selected.has(f.id) ? "row-selected" : ""}>
@@ -133,11 +106,11 @@ export function FilePickerDialog({ existingFileIds, onAdd, onClose, adding }: Pr
           </table>
         </div>
 
-        {totalPages > 1 && (
+          {totalPages > 1 && (
           <div class="dialog-pagination">
-            <button class="btn btn-sm" disabled={filters.page <= 1} onClick={() => handlePage(-1)}>Prev</button>
-            <span>Page {filters.page} of {totalPages}</span>
-            <button class="btn btn-sm" disabled={filters.page >= totalPages} onClick={() => handlePage(1)}>Next</button>
+            <button class="btn btn-sm" disabled={page <= 1} onClick={() => handlePage(-1)}>Prev</button>
+            <span>Page {page} of {totalPages}</span>
+            <button class="btn btn-sm" disabled={page >= totalPages} onClick={() => handlePage(1)}>Next</button>
           </div>
         )}
 

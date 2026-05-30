@@ -62,60 +62,6 @@ func TestFileHandler_List(t *testing.T) {
 		require.Equal(t, float64(3), data["total"])
 	})
 
-	t.Run("filter by extension", func(t *testing.T) {
-		r := httptest.NewRequest("GET", "/files?extension=.json", nil)
-		w := httptest.NewRecorder()
-		h.List(w, r)
-		require.Equal(t, http.StatusOK, w.Code)
-
-		var resp map[string]any
-		json.Unmarshal(w.Body.Bytes(), &resp)
-		data := resp["data"].(map[string]any)
-		files := data["files"].([]any)
-		require.Len(t, files, 1)
-	})
-
-	t.Run("filter by supported", func(t *testing.T) {
-		r := httptest.NewRequest("GET", "/files?supported=true", nil)
-		w := httptest.NewRecorder()
-		h.List(w, r)
-		require.Equal(t, http.StatusOK, w.Code)
-
-		var resp map[string]any
-		json.Unmarshal(w.Body.Bytes(), &resp)
-		data := resp["data"].(map[string]any)
-		files := data["files"].([]any)
-		// .txt is supported, .json is supported
-		require.Len(t, files, 3)
-	})
-
-	t.Run("filter by supported=false", func(t *testing.T) {
-		r := httptest.NewRequest("GET", "/files?supported=false", nil)
-		w := httptest.NewRecorder()
-		h.List(w, r)
-		require.Equal(t, http.StatusOK, w.Code)
-
-		var resp map[string]any
-		json.Unmarshal(w.Body.Bytes(), &resp)
-		data := resp["data"].(map[string]any)
-		files := data["files"].([]any)
-		// no files are unsupported
-		require.Empty(t, files)
-	})
-}
-
-func TestFileHandler_Extensions(t *testing.T) {
-	h, _, _ := setupFileHandler(t)
-
-	r := httptest.NewRequest("GET", "/files/extensions", nil)
-	w := httptest.NewRecorder()
-	h.Extensions(w, r)
-	require.Equal(t, http.StatusOK, w.Code)
-
-	var resp map[string]any
-	json.Unmarshal(w.Body.Bytes(), &resp)
-	exts := resp["data"].([]any)
-	require.ElementsMatch(t, []any{".txt", ".json"}, exts)
 }
 
 func TestFileHandler_Get(t *testing.T) {

@@ -10,7 +10,6 @@ import {
   getFileDetail,
   upsertComment,
   deleteComment,
-  getFileExtensions,
   getSuggestionDetail,
   updateSuggestion,
   deleteSuggestion,
@@ -34,7 +33,7 @@ import {
   getExtractStatus,
   getGenerationStatus,
 } from "../api"
-import type { FileListFilterState, RunningStatus } from "../api"
+import type { RunningStatus } from "../api"
 
 export function useWatchedDirs() {
   return useQuery({
@@ -86,28 +85,12 @@ export function useExtractFile() {
   })
 }
 
-export function useFileExtensions() {
-  return useQuery({
-    queryKey: ["fileExtensions"],
-    queryFn: getFileExtensions,
-  })
-}
-
-export function useAllFiles(filters?: FileListFilterState) {
-  const limit = filters?.limit ?? 50
-  const offset = (filters?.page ?? 1) > 1 ? ((filters?.page ?? 1) - 1) * limit : 0
+export function useAllFiles(page: number) {
+  const offset = page > 1 ? (page - 1) * 50 : 0
 
   return useQuery({
-    queryKey: ["files", filters],
-    queryFn: () => getAllFiles({
-      extension: filters?.extension,
-      processing_status: filters?.processing_status,
-      supported: filters?.supported,
-      sort: filters?.sort,
-      order: filters?.order,
-      limit,
-      offset,
-    }),
+    queryKey: ["files", page],
+    queryFn: () => getAllFiles(offset),
   })
 }
 

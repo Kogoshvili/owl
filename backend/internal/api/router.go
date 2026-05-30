@@ -29,7 +29,6 @@ func NewRouter(s *store.Store, sc *scanner.Scanner, ext *extractor.Extractor, cf
 	apiMux.HandleFunc("POST /watched-directories/{id}/extract", wdh.Extract)
 
 	apiMux.HandleFunc("GET /files", fh.List)
-	apiMux.HandleFunc("GET /files/extensions", fh.Extensions)
 	apiMux.HandleFunc("GET /files/{id}", fh.Get)
 	apiMux.HandleFunc("GET /files/{id}/raw", fh.Raw)
 	apiMux.HandleFunc("GET /watched-directories/{id}/files", fh.ListByDir)
