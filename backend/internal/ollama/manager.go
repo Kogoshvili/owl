@@ -8,8 +8,11 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"os"
 	"os/exec"
+	"owl/internal/config"
+	"owl/internal/llm"
 	"path/filepath"
 	"sync"
 	"time"
@@ -47,15 +50,44 @@ type Manager struct {
 	setupDone chan struct{}
 }
 
-func New(dataDir string) *Manager {
-	return &Manager{
-		dataDir: dataDir,
-		host:    "127.0.0.1:11434",
-		model:   "deepseek-r1:1.5b",
-		modelsDir: filepath.Join(dataDir, "ollama", "models"),
-		httpCli: &http.Client{Timeout: 10 * time.Second},
-		status:  Status{State: StateNotStarted, Message: "Not started"},
+func New(config *config.Config) *Manager {
+	parsed, err := url.Parse(config.LLM.BaseURL)
+	host := config.LLM.BaseURL
+	if err == nil && parsed.Host != "" {
+		host = parsed.Host
 	}
+
+	return &Manager{
+		dataDir:   config.DataDir,
+		host:      host,
+		model:     config.LLM.Model,
+		modelsDir: filepath.Join(config.DataDir, "ollama", "models"),
+		httpCli:   &http.Client{Timeout: 10 * time.Second},
+		status:    Status{State: StateNotStarted, Message: "Not started"},
+	}
+}
+
+func Init(config *config.Config) *Manager {
+	ollamaMgr := New(config)
+
+	llmCfg := llm.ConfigFromEnv(config)
+
+	if !llmCfg.Enabled {
+		slog.Info("LLM refinement disabled")
+		return ollamaMgr
+	}
+
+	if ollamaMgr.IsAlreadyRunning(context.Background()) {
+		if ollamaMgr.ModelExists(context.Background()) {
+			slog.Info("LLM refinement enabled", "url", llmCfg.BaseURL, "model", llmCfg.Model)
+			return ollamaMgr
+		}
+		slog.Info("Ollama running but model missing, will pull on demand", "model", llmCfg.Model)
+		return ollamaMgr
+	}
+
+	slog.Info("LLM refinement enabled", "url", llmCfg.BaseURL, "model", llmCfg.Model)
+	return ollamaMgr
 }
 
 func (m *Manager) setStatus(s State, msg string, args ...int64) {

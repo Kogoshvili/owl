@@ -7,20 +7,19 @@ import (
 	"owl/internal/api/middleware"
 	"owl/internal/config"
 	"owl/internal/extractor"
-	"owl/internal/llm"
 	"owl/internal/ollama"
 	"owl/internal/scanner"
 	"owl/internal/store"
 )
 
-func NewRouter(s *store.Store, sc *scanner.Scanner, ext *extractor.Extractor, llmClient *llm.Client, cfg *config.Config, ollamaMgr *ollama.Manager) http.Handler {
+func NewRouter(s *store.Store, sc *scanner.Scanner, ext *extractor.Extractor, cfg *config.Config, ollamaMgr *ollama.Manager) http.Handler {
 	apiMux := http.NewServeMux()
 
 	wdh := handler.NewWatchedDirHandler(s, sc, ext)
 	fh := handler.NewFileHandler(s, ext)
 	ch := handler.NewCommentHandler(s)
 	shh := handler.NewSuggestionHandler(s)
-	ih := handler.NewIntelligenceHandler(s, llmClient, ext, cfg, ollamaMgr)
+	ih := handler.NewIntelligenceHandler(s, ext, cfg, ollamaMgr)
 
 	apiMux.HandleFunc("GET /watched-directories", wdh.List)
 	apiMux.HandleFunc("POST /watched-directories", wdh.Create)

@@ -3,6 +3,7 @@ package logging
 import (
 	"log/slog"
 	"os"
+	"owl/internal/config"
 	"path/filepath"
 	"strings"
 	"time"
@@ -17,9 +18,9 @@ var logFile *os.File
 // Also writes logs to a timestamped file in the data/logs directory.
 // Log level is read from LOG_LEVEL env var (debug, info, warn, error).
 // Defaults to info. Colors are automatically disabled when stderr is not a TTY.
-func Init(level string, dataDir string) {
+func Init(config *config.Config) {
 	var slogLevel slog.Level
-	switch strings.ToLower(level) {
+	switch strings.ToLower(config.LogLevel) {
 	case "debug":
 		slogLevel = slog.LevelDebug
 	case "warn":
@@ -42,7 +43,7 @@ func Init(level string, dataDir string) {
 	})
 	handlers = append(handlers, tintHandler)
 
-	logsDir := filepath.Join(dataDir, "logs")
+	logsDir := filepath.Join(config.DataDir, "logs")
 	if err := os.MkdirAll(logsDir, 0755); err == nil {
 		logFile, err = os.OpenFile(
 			filepath.Join(logsDir, time.Now().Format("2006-01-02_15-04-05")+".log"),
@@ -58,11 +59,7 @@ func Init(level string, dataDir string) {
 		}
 	}
 
-	if len(handlers) == 1 {
-		slog.SetDefault(slog.New(handlers[0]))
-	} else {
-		slog.SetDefault(slog.New(slog.NewMultiHandler(handlers...)))
-	}
+	slog.SetDefault(slog.New(slog.NewMultiHandler(handlers...)))
 }
 
 // Close closes the log file if open

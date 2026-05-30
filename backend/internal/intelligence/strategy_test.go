@@ -22,7 +22,7 @@ func TestRegistry(t *testing.T) {
 	})
 
 	t.Run("register and get", func(t *testing.T) {
-		s := NewContentTFIDFStrategy(nil, nil, nil)
+		s := NewContentTFIDFStrategy(nil, nil)
 		r.Register(s)
 		got := r.Get(StrategyContentTFIDF)
 		require.NotNil(t, got)

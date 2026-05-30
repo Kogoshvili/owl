@@ -37,19 +37,19 @@ type IntelligenceHandler struct {
 	llmCfg         llm.ClientConfig
 }
 
-func NewIntelligenceHandler(s *store.Store, llmClient *llm.Client, ext *extractor.Extractor, cfg *config.Config, ollamaMgr *ollama.Manager) *IntelligenceHandler {
+func NewIntelligenceHandler(s *store.Store, ext *extractor.Extractor, cfg *config.Config, ollamaMgr *ollama.Manager) *IntelligenceHandler {
 	analyzer := intelligence.NewAnalyzer(s.Db())
 	registry := intelligence.NewRegistry()
 
-	registry.Register(intelligence.NewContentTFIDFStrategy(analyzer, s, llmClient))
+	registry.Register(intelligence.NewContentTFIDFStrategy(analyzer, s))
 
 	if cfg.LLM.EmbedModel != "" || cfg.LLM.FolderStrategy == "embeddings" {
 		embedURL := cfg.LLM.BaseURL
 		embedClient := embedding.NewClient(embedURL, cfg.LLM.EmbedModel)
-		registry.Register(intelligence.NewEmbeddingsStrategy(analyzer, s, llmClient, embedClient))
+		registry.Register(intelligence.NewEmbeddingsStrategy(analyzer, s, embedClient))
 	}
 
-	suggester := intelligence.NewSuggester(analyzer, s, llmClient, registry)
+	suggester := intelligence.NewSuggester(analyzer, s, registry)
 
 	folderStrategy := intelligence.ParseStrategyID(cfg.LLM.FolderStrategy)
 
@@ -57,7 +57,7 @@ func NewIntelligenceHandler(s *store.Store, llmClient *llm.Client, ext *extracto
 		store:          s,
 		analyzer:       analyzer,
 		suggester:      suggester,
-		llm:            llmClient,
+		llm:            nil,
 		extractor:      ext,
 		registry:       registry,
 		folderStrategy: folderStrategy,
@@ -73,7 +73,7 @@ func (h *IntelligenceHandler) ListStrategies(w http.ResponseWriter, r *http.Requ
 
 func (h *IntelligenceHandler) ListPhysicalFolders(w http.ResponseWriter, r *http.Request) {
 	dirIDStr := r.URL.Query().Get("watched_dir_id")
-	
+
 	if dirIDStr == "" {
 		tree, err := h.store.ListPhysicalFoldersAll()
 		if err != nil {
@@ -157,14 +157,14 @@ func (h *IntelligenceHandler) ListFolderSuggestions(w http.ResponseWriter, r *ht
 		}
 
 		result[strconv.FormatInt(s.ID, 10)] = map[string]any{
-			"id":               s.ID,
-			"name":             s.Name,
-			"description":      s.Description,
-			"suggestion_type":  s.SuggestionType,
-			"confidence":       s.Confidence,
-			"file_count":       len(detail.Files),
-			"preview":          preview,
-			"created_at":       s.CreatedAt,
+			"id":              s.ID,
+			"name":            s.Name,
+			"description":     s.Description,
+			"suggestion_type": s.SuggestionType,
+			"confidence":      s.Confidence,
+			"file_count":      len(detail.Files),
+			"preview":         preview,
+			"created_at":      s.CreatedAt,
 		}
 	}
 
@@ -172,11 +172,11 @@ func (h *IntelligenceHandler) ListFolderSuggestions(w http.ResponseWriter, r *ht
 }
 
 type generateSuggestionsRequest struct {
-	Name            *string  `json:"name"`
-	Description     *string  `json:"description"`
-	MinFiles        *int     `json:"min_files"`
-	MinSimilarity   *float64 `json:"min_similarity"`
-	Strategy        *string  `json:"strategy"`
+	Name          *string  `json:"name"`
+	Description   *string  `json:"description"`
+	MinFiles      *int     `json:"min_files"`
+	MinSimilarity *float64 `json:"min_similarity"`
+	Strategy      *string  `json:"strategy"`
 }
 
 func (h *IntelligenceHandler) GenerateSuggestions(w http.ResponseWriter, r *http.Request) {
@@ -510,20 +510,20 @@ func (h *IntelligenceHandler) classifyFoldersWithGuard(ctx context.Context, fold
 	}
 
 	type queueItem struct {
-		folder       *store.PhysicalFolder
-		parentName   string
+		folder        *store.PhysicalFolder
+		parentName    string
 		parentGuarded bool
-		depth        int
+		depth         int
 	}
 
 	queue := make([]queueItem, 0)
 	for _, tree := range trees {
 		for _, child := range tree.Children {
 			queue = append(queue, queueItem{
-				folder:       child,
-				parentName:   tree.Name,
+				folder:        child,
+				parentName:    tree.Name,
 				parentGuarded: false,
-				depth:        1,
+				depth:         1,
 			})
 		}
 	}
@@ -556,10 +556,10 @@ func (h *IntelligenceHandler) classifyFoldersWithGuard(ctx context.Context, fold
 			} else {
 				for _, child := range folder.Children {
 					queue = append(queue, queueItem{
-						folder:       child,
-						parentName:   folder.Name,
+						folder:        child,
+						parentName:    folder.Name,
 						parentGuarded: false,
-						depth:        item.depth + 1,
+						depth:         item.depth + 1,
 					})
 				}
 			}
@@ -588,10 +588,10 @@ func (h *IntelligenceHandler) classifyFoldersWithGuard(ctx context.Context, fold
 			existingGuards[folder.Path] = false
 			for _, child := range folder.Children {
 				queue = append(queue, queueItem{
-					folder:       child,
-					parentName:   folder.Name,
+					folder:        child,
+					parentName:    folder.Name,
 					parentGuarded: false,
-					depth:        item.depth + 1,
+					depth:         item.depth + 1,
 				})
 			}
 			continue
@@ -603,10 +603,10 @@ func (h *IntelligenceHandler) classifyFoldersWithGuard(ctx context.Context, fold
 			existingGuards[folder.Path] = false
 			for _, child := range folder.Children {
 				queue = append(queue, queueItem{
-					folder:       child,
-					parentName:   folder.Name,
+					folder:        child,
+					parentName:    folder.Name,
 					parentGuarded: false,
-					depth:        item.depth + 1,
+					depth:         item.depth + 1,
 				})
 			}
 			continue
@@ -628,10 +628,10 @@ func (h *IntelligenceHandler) classifyFoldersWithGuard(ctx context.Context, fold
 			existingGuards[folder.Path] = false
 			for _, child := range folder.Children {
 				queue = append(queue, queueItem{
-					folder:       child,
-					parentName:   folder.Name,
+					folder:        child,
+					parentName:    folder.Name,
 					parentGuarded: false,
-					depth:        item.depth + 1,
+					depth:         item.depth + 1,
 				})
 			}
 			continue
@@ -654,10 +654,10 @@ func (h *IntelligenceHandler) classifyFoldersWithGuard(ctx context.Context, fold
 			slog.Debug("folder classified as open, will process children", "path", folder.Path, "reason", classification.Reason)
 			for _, child := range folder.Children {
 				queue = append(queue, queueItem{
-					folder:       child,
-					parentName:   folder.Name,
+					folder:        child,
+					parentName:    folder.Name,
 					parentGuarded: false,
-					depth:        item.depth + 1,
+					depth:         item.depth + 1,
 				})
 			}
 		}
@@ -821,7 +821,7 @@ func (h *IntelligenceHandler) GetLlmStatus(w http.ResponseWriter, r *http.Reques
 	}
 
 	writeJSON(w, http.StatusOK, map[string]any{
-		"llm_available":      llmAvailable,
+		"llm_available":       llmAvailable,
 		"embedding_available": embeddingAvailable,
 	})
 }
@@ -1138,13 +1138,13 @@ func (h *IntelligenceHandler) refineSuggestionAsync(id int64) {
 
 func (h *IntelligenceHandler) GetUnprocessedCount(w http.ResponseWriter, r *http.Request) {
 	dirIDStr := r.URL.Query().Get("watched_dir_id")
-	
+
 	var count int
 	var err error
-	
+
 	if dirIDStr == "" {
 		err = h.store.Db().QueryRow(`
-			SELECT COUNT(*) FROM files 
+			SELECT COUNT(*) FROM files
 			WHERE status = 'active' AND processing_status = 'unprocessed'
 		`).Scan(&count)
 	} else {
@@ -1154,11 +1154,11 @@ func (h *IntelligenceHandler) GetUnprocessedCount(w http.ResponseWriter, r *http
 			return
 		}
 		err = h.store.Db().QueryRow(`
-			SELECT COUNT(*) FROM files 
+			SELECT COUNT(*) FROM files
 			WHERE watched_dir_id = ? AND status = 'active' AND processing_status = 'unprocessed'
 		`, dirID).Scan(&count)
 	}
-	
+
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
@@ -1182,7 +1182,7 @@ func (h *IntelligenceHandler) GetProcessingStats(w http.ResponseWriter, r *http.
 	var stats processingStats
 
 	h.store.Db().QueryRow(`SELECT COUNT(*) FROM files WHERE status = 'active'`).Scan(&stats.TotalFiles)
-	h.store.Db().QueryRow(`SELECT COUNT(*) FROM files WHERE status = 'active' AND processing_status = 'unprocessed' AND LOWER(extension) IN `+store.SupportedExtsSQL).Scan(&stats.Extractable)
+	h.store.Db().QueryRow(`SELECT COUNT(*) FROM files WHERE status = 'active' AND processing_status = 'unprocessed' AND LOWER(extension) IN ` + store.SupportedExtsSQL).Scan(&stats.Extractable)
 	h.store.Db().QueryRow(`SELECT COUNT(*) FROM files WHERE status = 'active' AND processing_status = 'queued'`).Scan(&stats.Queued)
 	h.store.Db().QueryRow(`SELECT COUNT(*) FROM files WHERE status = 'active' AND processing_status = 'processing'`).Scan(&stats.Processing)
 	h.store.Db().QueryRow(`SELECT COUNT(*) FROM files WHERE status = 'active' AND processing_status = 'processed'`).Scan(&stats.Processed)

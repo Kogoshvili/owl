@@ -6,23 +6,21 @@ import (
 )
 
 const (
-	MinFilesForFolder           = 3
-	maxFilesForLLM              = 50
-	subClusterThresholdBoost    = 0.15
+	MinFilesForFolder        = 3
+	maxFilesForLLM           = 50
+	subClusterThresholdBoost = 0.15
 )
 
 type Suggester struct {
 	analyzer *Analyzer
 	store    *store.Store
-	llm      *llm.Client
 	registry *Registry
 }
 
-func NewSuggester(analyzer *Analyzer, store *store.Store, llmClient *llm.Client, registry *Registry) *Suggester {
+func NewSuggester(analyzer *Analyzer, store *store.Store, registry *Registry) *Suggester {
 	return &Suggester{
 		analyzer: analyzer,
 		store:    store,
-		llm:      llmClient,
 		registry: registry,
 	}
 }

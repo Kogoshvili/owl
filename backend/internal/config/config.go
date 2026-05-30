@@ -1,5 +1,10 @@
 package config
 
+import (
+	"flag"
+	"os"
+)
+
 type LLMConfig struct {
 	Enabled        bool
 	BaseURL        string
@@ -9,11 +14,26 @@ type LLMConfig struct {
 }
 
 type Config struct {
-	LLM LLMConfig
+	LLM      LLMConfig
+	Port     string
+	DataDir  string
+	LogLevel string
 }
 
-func Default() *Config {
+func Init() *Config {
+	port := flag.String("port", "3721", "HTTP server port")
+	dataDir := flag.String("data-dir", "data", "Data directory for database and logs")
+	flag.Parse()
+
+	logLevel := os.Getenv("LOG_LEVEL")
+	if logLevel == "" {
+		logLevel = "info"
+	}
+
 	return &Config{
+		Port:     *port,
+		DataDir:  *dataDir,
+		LogLevel: logLevel,
 		LLM: LLMConfig{
 			Enabled:        true,
 			BaseURL:        "http://127.0.0.1:11434",
