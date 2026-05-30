@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"flag"
 	"log/slog"
 	"net/http"
 	"os"
@@ -18,13 +19,23 @@ import (
 )
 
 func main() {
+	port := flag.String("port", "3721", "HTTP server port")
+	dataDir := flag.String("data-dir", "data", "Data directory for database and logs")
+	flag.Parse()
+
 	logLevel := os.Getenv("LOG_LEVEL")
 	if logLevel == "" {
 		logLevel = "info"
 	}
-	logging.Init(logLevel)
 
-	configPath := "../config.json" //os.Getenv("OWL_CONFIG")
+	if err := os.MkdirAll(*dataDir, 0755); err != nil {
+		slog.Error("failed to create data directory", "error", err)
+		os.Exit(1)
+	}
+
+	logging.Init(logLevel, *dataDir)
+
+	configPath := "../config.json"
 	if configPath == "" {
 		var err error
 		configPath, err = config.DefaultConfigPath()
@@ -56,13 +67,7 @@ func main() {
 		slog.Info("LLM refinement disabled")
 	}
 
-	dataDir := "data"
-	if err := os.MkdirAll(dataDir, 0755); err != nil {
-		slog.Error("failed to create data directory", "error", err)
-		os.Exit(1)
-	}
-
-	database, err := db.Init(filepath.Join(dataDir, "owl.db"))
+	database, err := db.Init(filepath.Join(*dataDir, "owl.db"))
 	if err != nil {
 		slog.Error("failed to initialize database", "error", err)
 		os.Exit(1)
@@ -75,8 +80,8 @@ func main() {
 	sc := scanner.New(s)
 	ext := extractor.New(s)
 	router := api.NewRouter(s, sc, ext, llmClient, cfg)
-	addr := ":3721"
-	slog.Info("starting server", "addr", addr)
+	addr := "127.0.0.1:" + *port
+	slog.Info("starting server", "addr", addr, "data_dir", *dataDir)
 	if err := http.ListenAndServe(addr, router); err != nil {
 		slog.Error("server failed", "error", err)
 		os.Exit(1)

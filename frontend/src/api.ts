@@ -39,7 +39,8 @@ export interface FileDetail {
   extracted_content: string | null
 }
 
-const BASE = "/api"
+const isTauri = typeof window !== "undefined" && (window as any).__TAURI_INTERNALS__
+const BASE = isTauri ? "http://127.0.0.1:3721/api" : "/api"
 
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
   const res = await fetch(`${BASE}${path}`, { cache: "no-store", ...options })
@@ -70,6 +71,17 @@ export function scanDir(id: number): Promise<WatchedDir> {
 
 export function deleteDir(id: number): Promise<void> {
   return request<void>(`/watched-directories/${id}`, { method: "DELETE" })
+}
+
+export interface FileListParams {
+  extension?: string
+  status?: string
+  processing_status?: string
+  supported?: string
+  sort?: string
+  order?: string
+  limit?: number
+  offset?: number
 }
 
 export interface FileListFilterState {

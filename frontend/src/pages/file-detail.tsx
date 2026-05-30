@@ -11,11 +11,7 @@ function formatBytes(bytes: number): string {
   return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + " " + sizes[i]
 }
 
-function formatTime(iso: string | null): string {
-  if (!iso) return "-"
-  const d = new Date(iso)
-  return d.toLocaleString()
-}
+
 
 const IMAGE_EXTS = new Set([".jpg", ".jpeg", ".png", ".gif", ".bmp", ".webp", ".svg"])
 const TEXT_EXTS = new Set([".txt", ".md", ".log", ".csv", ".json", ".xml", ".yaml", ".yml", ".toml", ".ini", ".cfg", ".conf", ".sh", ".bat", ".ps1", ".py", ".js", ".ts", ".go", ".rs", ".java", ".c", ".cpp", ".h", ".hpp", ".rb", ".php", ".sql", ".env", ".gitignore", ".html", ".htm", ".css", ".scss"])

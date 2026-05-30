@@ -58,7 +58,7 @@ function AcceptModal({ suggestion, onAccept, onClose }: {
               <input type="text" value={dest} onInput={(e) => setDest((e.target as HTMLInputElement).value)} placeholder="~/Owl-organized (default)" style="flex:1" />
               <button type="button" class="btn btn-sm" onClick={handleBrowseDest}>Browse</button>
             </div>
-            <input type="file" ref={fileInputRef} style="display:none" webkitdirectory onChange={handleFileInput} />
+            <input type="file" ref={fileInputRef} style="display:none" {...{webkitdirectory: ""} as any} onChange={handleFileInput} />
           </label>
           <div class="modal-actions">
             <button type="submit" class="btn btn-primary">Accept & Materialize</button>

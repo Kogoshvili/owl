@@ -17,7 +17,7 @@ var logFile *os.File
 // Also writes logs to a timestamped file in the data/logs directory.
 // Log level is read from LOG_LEVEL env var (debug, info, warn, error).
 // Defaults to info. Colors are automatically disabled when stderr is not a TTY.
-func Init(level string) {
+func Init(level string, dataDir string) {
 	var slogLevel slog.Level
 	switch strings.ToLower(level) {
 	case "debug":
@@ -42,7 +42,7 @@ func Init(level string) {
 	})
 	handlers = append(handlers, tintHandler)
 
-	logsDir := filepath.Join("data", "logs")
+	logsDir := filepath.Join(dataDir, "logs")
 	if err := os.MkdirAll(logsDir, 0755); err == nil {
 		logFile, err = os.OpenFile(
 			filepath.Join(logsDir, time.Now().Format("2006-01-02_15-04-05")+".log"),

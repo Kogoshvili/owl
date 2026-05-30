@@ -75,7 +75,6 @@ export function useDeleteDir() {
 }
 
 export function useExtractFile() {
-  const qc = useQueryClient()
   return useMutation({
     mutationFn: (id: number) => extractFile(id),
   })
@@ -150,7 +149,7 @@ export function useRefineSuggestion() {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: (id: number) => refineSuggestion(id),
-    onSuccess: () => {
+    onSuccess: (_data, id) => {
       setTimeout(() => {
         qc.invalidateQueries({ queryKey: ["suggestions"] })
         qc.invalidateQueries({ queryKey: ["suggestion", id] })
@@ -315,7 +314,7 @@ function useRunningStatus(key: string, fn: () => Promise<RunningStatus>) {
     queryKey: [key],
     queryFn: fn,
     staleTime: 0,
-    refetchInterval: (data) => (data?.running ? 2000 : 30000),
+    refetchInterval: (query) => (query.state.data?.running ? 2000 : 30000),
   })
 }
 

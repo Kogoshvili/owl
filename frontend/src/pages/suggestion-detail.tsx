@@ -25,7 +25,7 @@ function SuggestionHeader({ suggestion, updateMutation, deleteMutation, refineMu
   const [editing, setEditing] = useState(false)
   const [name, setName] = useState(suggestion.name)
   const [desc, setDesc] = useState(suggestion.description)
-  const [error, setError] = useState("")
+  const [error, _setError] = useState("")
   const [showAccept, setShowAccept] = useState(false)
   const [acceptDest, setAcceptDest] = useState("")
 

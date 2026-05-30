@@ -91,7 +91,7 @@ export function FileTree({ dirs, addMutation, scanMutation, deleteMutation, anyR
         <button class="btn" onClick={handleBrowse}>
           Browse
         </button>
-        <input type="file" ref={fileInputRef} style="display:none" webkitdirectory onChange={handleFileInput} />
+        <input type="file" ref={fileInputRef} style="display:none" {...{webkitdirectory: ""} as any} onChange={handleFileInput} />
       </div>
 
       {addError && <div class="error-msg">{addError}</div>}
