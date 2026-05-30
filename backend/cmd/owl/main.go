@@ -35,22 +35,7 @@ func main() {
 
 	logging.Init(logLevel, *dataDir)
 
-	configPath := "../config.json"
-	if configPath == "" {
-		var err error
-		configPath, err = config.DefaultConfigPath()
-		if err != nil {
-			slog.Warn("could not determine default config path", "error", err)
-		} else {
-			slog.Info("using default config", "path", configPath)
-		}
-	}
-
-	cfg, err := config.Load(configPath)
-	if err != nil {
-		slog.Warn("failed to load config file", "error", err)
-		cfg = &config.Config{}
-	}
+	cfg := config.Default()
 
 	llmCfg := llm.ConfigFromEnv(cfg)
 	var llmClient *llm.Client

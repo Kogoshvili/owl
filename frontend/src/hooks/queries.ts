@@ -70,7 +70,12 @@ export function useDeleteDir() {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: (id: number) => deleteDir(id),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["watchedDirs"] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["watchedDirs"] })
+      qc.invalidateQueries({ queryKey: ["physicalFolders"] })
+      qc.invalidateQueries({ queryKey: ["folderGuards"] })
+      qc.invalidateQueries({ queryKey: ["processingStats"] })
+    },
   })
 }
 

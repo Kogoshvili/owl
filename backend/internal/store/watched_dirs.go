@@ -2,6 +2,7 @@ package store
 
 import (
 	"database/sql"
+	"strings"
 	"time"
 )
 
@@ -80,7 +81,8 @@ func (s *Store) DeleteWatchedDirAndFiles(id int64) error {
 		return err
 	}
 
-	_, err = tx.Exec(`DELETE FROM folder_guard_classifications WHERE path = ? OR path LIKE ?`, path, path+"/%")
+	cleanPath := strings.TrimRight(strings.ReplaceAll(path, "\\", "/"), "/")
+	_, err = tx.Exec(`DELETE FROM folder_guard_classifications WHERE path = ? OR path LIKE ?`, cleanPath, cleanPath+"/%")
 	if err != nil {
 		return err
 	}

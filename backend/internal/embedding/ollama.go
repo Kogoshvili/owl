@@ -23,6 +23,9 @@ func NewClient(baseURL, model string) *Client {
 		model:   model,
 		httpClient: &http.Client{
 			Timeout: 120 * time.Second,
+			Transport: &http.Transport{
+				DisableKeepAlives: true,
+			},
 		},
 	}
 }
@@ -33,15 +36,8 @@ type embedRequest struct {
 }
 
 type embedResponse struct {
-	Data []struct {
-		Embedding []float32 `json:"embedding"`
-		Index     int       `json:"index"`
-	} `json:"data"`
-	Model string `json:"model"`
-	Usage struct {
-		PromptTokens int `json:"prompt_tokens"`
-		TotalTokens  int `json:"total_tokens"`
-	} `json:"usage"`
+	Model      string      `json:"model"`
+	Embeddings [][]float32 `json:"embeddings"`
 }
 
 func (c *Client) Embed(ctx context.Context, texts []string) ([][]float32, error) {
@@ -59,7 +55,7 @@ func (c *Client) Embed(ctx context.Context, texts []string) ([][]float32, error)
 		return nil, fmt.Errorf("embedding: marshal request: %w", err)
 	}
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.baseURL+"/embeddings", bytes.NewReader(body))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.baseURL+"/api/embed", bytes.NewReader(body))
 	if err != nil {
 		return nil, fmt.Errorf("embedding: create request: %w", err)
 	}
@@ -81,23 +77,18 @@ func (c *Client) Embed(ctx context.Context, texts []string) ([][]float32, error)
 		return nil, fmt.Errorf("embedding: decode response: %w", err)
 	}
 
-	if len(result.Data) != len(texts) {
-		return nil, fmt.Errorf("embedding: got %d embeddings for %d inputs", len(result.Data), len(texts))
+	if len(result.Embeddings) != len(texts) {
+		return nil, fmt.Errorf("embedding: got %d embeddings for %d inputs", len(result.Embeddings), len(texts))
 	}
 
-	embeddings := make([][]float32, len(result.Data))
-	for i, d := range result.Data {
-		embeddings[i] = d.Embedding
-	}
-
-	return embeddings, nil
+	return result.Embeddings, nil
 }
 
 func (c *Client) IsAvailable(ctx context.Context) bool {
 	checkCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 
-	req, err := http.NewRequestWithContext(checkCtx, http.MethodGet, c.baseURL+"/models", nil)
+	req, err := http.NewRequestWithContext(checkCtx, http.MethodGet, c.baseURL+"/api/tags", nil)
 	if err != nil {
 		return false
 	}

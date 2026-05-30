@@ -8,6 +8,7 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"strings"
 	"sync"
 	"time"
 )
@@ -28,6 +29,9 @@ func NewClient(cfg ClientConfig) *Client {
 		cfg: cfg,
 		http: &http.Client{
 			Timeout: 120 * time.Second,
+			Transport: &http.Transport{
+				DisableKeepAlives: true,
+			},
 		},
 		ready: false,
 	}
@@ -46,18 +50,19 @@ type chatRequest struct {
 	Stream   bool          `json:"stream"`
 }
 
-type chatChoice struct {
-	Message chatMessage `json:"message"`
+type ollamaChatResponse struct {
+	Model     string      `json:"model"`
+	Message   chatMessage `json:"message"`
+	Done      bool        `json:"done"`
+	DoneReason string     `json:"done_reason,omitempty"`
 }
 
-type chatResponse struct {
-	Choices []chatChoice `json:"choices"`
+type ollamaModel struct {
+	Name string `json:"name"`
 }
 
-type modelList struct {
-	Data []struct {
-		ID string `json:"id"`
-	} `json:"data"`
+type ollamaTagsResponse struct {
+	Models []ollamaModel `json:"models"`
 }
 
 const (
@@ -82,7 +87,7 @@ func (c *Client) chatCompletion(ctx context.Context, prompt string) (string, err
 		return "", fmt.Errorf("marshalling request: %w", err)
 	}
 
-	url := c.cfg.BaseURL + "/chat/completions"
+	url := c.cfg.BaseURL + "/api/chat"
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(reqBody))
 	if err != nil {
 		return "", fmt.Errorf("creating request: %w", err)
@@ -104,16 +109,16 @@ func (c *Client) chatCompletion(ctx context.Context, prompt string) (string, err
 		return "", fmt.Errorf("API returned status %d: %s", resp.StatusCode, string(respBody))
 	}
 
-	var chatResp chatResponse
-	if err := json.Unmarshal(respBody, &chatResp); err != nil {
+	var ollamaResp ollamaChatResponse
+	if err := json.Unmarshal(respBody, &ollamaResp); err != nil {
 		return "", fmt.Errorf("parsing response: %w", err)
 	}
 
-	if len(chatResp.Choices) == 0 {
-		return "", fmt.Errorf("no choices in response")
+	if ollamaResp.Message.Content == "" {
+		return "", fmt.Errorf("empty response from Ollama")
 	}
 
-	return chatResp.Choices[0].Message.Content, nil
+	return ollamaResp.Message.Content, nil
 }
 
 func (c *Client) IsAvailable(ctx context.Context) bool {
@@ -128,8 +133,8 @@ func (c *Client) IsAvailable(ctx context.Context) bool {
 	checkCtx, cancel := context.WithTimeout(context.Background(), heartbeatTimeout)
 	defer cancel()
 
-	// Use GET /v1/models as a lightweight health check
-	url := c.cfg.BaseURL + "/models"
+	// Use GET /api/tags as a lightweight health check
+	url := c.cfg.BaseURL + "/api/tags"
 	req, err := http.NewRequestWithContext(checkCtx, http.MethodGet, url, nil)
 	if err != nil {
 		slog.Debug("llm: heartbeat request failed", "error", err)
@@ -141,11 +146,28 @@ func (c *Client) IsAvailable(ctx context.Context) bool {
 		slog.Debug("llm: heartbeat failed, will retry", "error", err)
 		return false
 	}
+
+	respBody, _ := io.ReadAll(resp.Body)
 	resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
 		slog.Debug("llm: heartbeat returned non-OK status", "status", resp.StatusCode)
 		return false
+	}
+
+	var tags ollamaTagsResponse
+	if err := json.Unmarshal(respBody, &tags); err == nil {
+		found := false
+		for _, m := range tags.Models {
+			if m.Name == c.cfg.Model {
+				found = true
+				break
+			}
+		}
+		if !found {
+			slog.Error("llm: model not found in Ollama", "model", c.cfg.Model, "available_models", modelNames(tags.Models))
+			return false
+		}
 	}
 
 	c.ready = true
@@ -270,4 +292,12 @@ func (c *Client) ClassifyFolder(ctx context.Context, folderName string, subfolde
 
 		slog.Info("llm: classified folder", "folder", folderName, "related", result.Related, "reason", result.Reason)
 		return result, nil
+}
+
+func modelNames(models []ollamaModel) string {
+	names := make([]string, len(models))
+	for i, m := range models {
+		names[i] = m.Name
 	}
+	return strings.Join(names, ", ")
+}

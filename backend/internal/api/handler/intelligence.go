@@ -212,7 +212,7 @@ func (h *IntelligenceHandler) generateSuggestionsAsync(ctx context.Context, minF
 	}()
 	slog.Info("async generation started", "min_files", minFiles, "min_similarity", minSimilarity, "strategy", strategyID)
 	start := time.Now()
-	h.genTracker.update("initializing", "Clearing old suggestions", 0, 1)
+	h.genTracker.update("initializing", "Clearing old suggestions", 0, 0)
 
 	if err := h.store.DeleteAllSuggestions(); err != nil {
 		slog.Error("failed to clear old suggestions", "error", err)
@@ -248,7 +248,7 @@ func (h *IntelligenceHandler) generateSuggestionsAsync(ctx context.Context, minF
 	}
 	slog.Info("folder guard classification complete", "guarded_count", len(guardedPaths))
 
-	h.genTracker.update("filtering_folders", "Filtering out guarded folders", 0, len(folderToFileIDs))
+	h.genTracker.update("filtering_folders", "Filtering out guarded folders", 0, 0)
 	slog.Info("filtering out guarded folders", "folder_count", len(folderToFileIDs), "guarded_paths", len(guardedPaths))
 	filteredCount := 0
 	for path := range folderToFileIDs {
@@ -278,7 +278,7 @@ func (h *IntelligenceHandler) generateSuggestionsAsync(ctx context.Context, minF
 		return
 	}
 
-	h.genTracker.update("building_corpus", "Building global corpus", 0, 1)
+	h.genTracker.update("building_corpus", "Building global corpus", 0, 0)
 	slog.Info("building global corpus")
 	corpusStart := time.Now()
 	globalCorpus, err := h.analyzer.BuildCorpus(allFileIDs)
@@ -348,7 +348,7 @@ func (h *IntelligenceHandler) generateSuggestionsAsync(ctx context.Context, minF
 		return
 	}
 
-	h.genTracker.update("clustering", "Running strategy clustering", 0, 1)
+	h.genTracker.update("clustering", "Running strategy clustering", 0, 0)
 	strategy := h.registry.Get(strategyID)
 	if strategy == nil {
 		strategy = h.registry.Default()
@@ -729,7 +729,7 @@ func (h *IntelligenceHandler) RunGuard(w http.ResponseWriter, r *http.Request) {
 				h.guardTracker.error(fmt.Sprintf("Guard panicked: %v", r))
 			}
 		}()
-		h.guardTracker.update("listing", "Listing folders", 0, 1)
+		h.guardTracker.update("listing", "Listing folders", 0, 0)
 		trees, err := h.store.ListPhysicalFoldersAll()
 		if err != nil {
 			slog.Error("guard: failed to list physical folders", "error", err)
@@ -742,7 +742,7 @@ func (h *IntelligenceHandler) RunGuard(w http.ResponseWriter, r *http.Request) {
 			h.collectFileIDs(tree, folderToFileIDs)
 		}
 
-		h.guardTracker.update("classifying", "Classifying folders with LLM", 0, len(folderToFileIDs))
+		h.guardTracker.update("classifying", "Classifying folders with LLM", 0, 0)
 
 		guardMap, err := h.classifyFoldersWithGuard(context.Background(), folderToFileIDs, trees)
 		if err != nil {
@@ -751,7 +751,7 @@ func (h *IntelligenceHandler) RunGuard(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		h.guardTracker.update("escalating", "Escalating guards", 0, 1)
+		h.guardTracker.update("escalating", "Escalating guards", 0, 0)
 		h.escalateGuards(trees, guardMap)
 
 		h.guardTracker.complete("Guard complete")

@@ -65,7 +65,7 @@ Materialized:        Moved to a new folder on disk
 Two organization backends, configured via `config.json` or the strategy dropdown:
 
 - **`content_tfidf`** (default): TF-IDF vectors + pairwise cosine similarity + flood-fill clustering. Fast (~30s for 12K files), works immediately with no model dependency.
-- **`embeddings`**: LM Studio embedding vectors + DBSCAN clustering. Semantic understanding but requires an embedding model endpoint.
+- **`embeddings`**: Ollama embedding vectors + DBSCAN clustering. Semantic understanding but requires an embedding model.
 
 ## Materialization Flow
 
@@ -102,37 +102,29 @@ You have PDFs, documents, images, and installers scattered across Downloads and 
 - **Backend:** Go 1.26 + SQLite with FTS5 + stdlib `http.ServeMux` on `127.0.0.1:3721`
 - **Frontend:** Preact + Vite + TypeScript + TanStack Query
 - **Desktop shell:** Tauri v2 (spawns Go as sidecar, serves frontend natively)
-- **LLM:** LM Studio (OpenAI-compatible) for folder guard + refinement — default model: `deepseek-r1-distill-qwen-1.5b`
-- **Embeddings:** LM Studio `/v1/embeddings` for semantic strategy
+- **LLM:** Ollama (OpenAI-compatible) for folder guard + refinement — default model: `deepseek-r1:1.5b`
+- **Embeddings:** Ollama `/v1/embeddings` for semantic strategy
 - **Database:** SQLite via `modernc.org/sqlite` (no CGO), migrations via `golang-migrate`
-- **Config:** `config.json` or env vars (`LLM_ENABLED`, `LLM_BASE_URL`, `LLM_MODEL`, `EMBED_MODEL`, `LOG_LEVEL`)
+- **Config:** Hardcoded defaults in `config.Default()` — LLM: enabled, Ollama at `http://localhost:11434`, model `deepseek-r1:1.5b`, embedding `nomic-embed-text:latest`, strategy `content_tfidf`
 - **CLI flags:** `--port` (default `3721`), `--data-dir` (default `data`)
 - **Build:** `build.sh` (Linux/macOS) / `build.ps1` (Windows) — builds Go binary + Tauri installer
 - **CI/CD:** GitHub Actions (`.github/workflows/release.yml`) — builds all 3 platforms on tag push
 
 ## Configuration
 
-```json
-{
-  "llm": {
-    "base_url": "http://localhost:1234/v1",
-    "model": "deepseek-r1-distill-qwen-1.5b",
-    "embed_model": "",
-    "folder_strategy": "content_tfidf"
-  },
-  "log_level": "info"
-}
-```
+All configuration is hardcoded in `config.Default()` in Go. No config file needed.
 
-Key settings:
-| Key | Default | Description |
-|-----|---------|-------------|
-| `llm.base_url` | `http://localhost:1234/v1` | LM Studio server URL |
-| `llm.model` | `deepseek-r1-distill-qwen-1.5b` | LLM for guard + refinement |
-| `llm.embed_model` | `""` | Embedding model name (required for embeddings strategy) |
-| `llm.folder_strategy` | `"content_tfidf"` | `"content_tfidf"` or `"embeddings"` |
+| Setting | Value | Description |
+|---------|-------|-------------|
 | `--port` | `3721` | Backend HTTP port |
 | `--data-dir` | `data` | Directory for database and logs |
+| LLM enabled | `true` | Guard + refinement |
+| Ollama URL | `http://localhost:11434` | Ollama server |
+| Chat model | `deepseek-r1:1.5b` | Model for guard + refinement |
+| Embed model | `nomic-embed-text:latest` | Model for embeddings strategy |
+| Strategy | `content_tfidf` | `content_tfidf` or `embeddings` |
+
+To change, edit `backend/internal/config/config.go` and rebuild.
 
 ## API
 
@@ -210,10 +202,10 @@ owl/
 │   │   ├── cluster/          # DBSCAN clustering
 │   │   ├── config/           # Configuration
 │   │   ├── db/               # Migration runner + SQL files
-│   │   ├── embedding/        # LM Studio embedding client
+│   │   ├── embedding/        # Ollama embedding client
 │   │   ├── extractor/        # File content extraction
 │   │   ├── intelligence/     # TF-IDF, strategies, suggester
-│   │   ├── llm/              # LM Studio LLM client
+│   │   ├── llm/              # Ollama LLM client
 │   │   ├── logging/          # Structured logging (tint + file)
 │   │   ├── scanner/          # Filesystem walker
 │   │   ├── store/            # SQLite CRUD queries
@@ -237,12 +229,10 @@ owl/
 │   ├── vite.config.ts        # Vite config with /api proxy
 │   └── package.json
 ├── data/                     # Runtime data (gitignored)
-├── config.json               # User configuration
-├── config.example.json
 └── VISION.md                 # Design document
 ```
 
 ## TODO
 
 - **Media support** — EXIF, audio/video metadata extraction
-- **Content_tfidf only as default** — embeddings strategy requires LM Studio setup
+- **Content_tfidf only as default** — embeddings strategy requires an Ollama embedding model

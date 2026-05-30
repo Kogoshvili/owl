@@ -45,7 +45,7 @@
 
 ### 🚧 Future (llama-server bundling)
 
-LLM integration is optional and not bundled in the installer. Users currently need their own LM Studio endpoint. The sections below describe the planned first-run flow for bundled model support.
+LLM integration is optional and not bundled in the installer. Users currently need their own Ollama endpoint. The sections below describe the planned first-run flow for bundled model support.
 
 ## LLM Strategy Decision
 
@@ -60,7 +60,7 @@ Two competing approaches for the organization backend.
 | Works offline immediately | Can't group files that share no common words |
 | Simple, well-tested | |
 
-### Embeddings (LM Studio / other API)
+### Embeddings (Ollama / other API)
 
 | Pro | Con |
 |-----|-----|

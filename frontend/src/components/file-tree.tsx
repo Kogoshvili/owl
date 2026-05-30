@@ -44,16 +44,26 @@ export function FileTree({ dirs, addMutation, scanMutation, deleteMutation, anyR
   }
 
   const handleBrowse = async () => {
+    let selected: string | null = null
     if ((window as any).__TAURI_INTERNALS__) {
       try {
         const { open } = await import("@tauri-apps/plugin-dialog")
-        const selected = await open({ directory: true, multiple: false, title: "Select directory to watch" })
-        if (selected) setAddPath(selected)
+        selected = await open({ directory: true, multiple: false, title: "Select directory to watch" })
       } catch {
         fileInputRef.current?.click()
       }
     } else {
       fileInputRef.current?.click()
+    }
+    if (selected) {
+      setAddPath(selected)
+      setAddError("")
+      try {
+        await addMutation.mutateAsync(selected)
+        setAddPath("")
+      } catch (e: any) {
+        setAddError(e.message)
+      }
     }
   }
 
