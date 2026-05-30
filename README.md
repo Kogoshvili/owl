@@ -102,10 +102,10 @@ You have PDFs, documents, images, and installers scattered across Downloads and 
 - **Backend:** Go 1.26 + SQLite with FTS5 + stdlib `http.ServeMux` on `127.0.0.1:3721`
 - **Frontend:** Preact + Vite + TypeScript + TanStack Query
 - **Desktop shell:** Tauri v2 (spawns Go as sidecar, serves frontend natively)
-- **LLM:** Ollama (OpenAI-compatible) for folder guard + refinement — default model: `deepseek-r1:1.5b`
-- **Embeddings:** Ollama `/v1/embeddings` for semantic strategy
+- **LLM:** Ollama at `127.0.0.1:11434` — auto-detects if running; Setup AI button downloads + starts Ollama and pulls model on demand. Default model: `deepseek-r1:1.5b`
+- **Embeddings:** Ollama `/v1/embeddings` for semantic strategy (`nomic-embed-text:latest`)
 - **Database:** SQLite via `modernc.org/sqlite` (no CGO), migrations via `golang-migrate`
-- **Config:** Hardcoded defaults in `config.Default()` — LLM: enabled, Ollama at `http://localhost:11434`, model `deepseek-r1:1.5b`, embedding `nomic-embed-text:latest`, strategy `content_tfidf`
+- **Config:** Hardcoded defaults in `config.Default()` — LLM enabled, Ollama at `http://127.0.0.1:11434`, model `deepseek-r1:1.5b`, strategy `content_tfidf`
 - **CLI flags:** `--port` (default `3721`), `--data-dir` (default `data`)
 - **Build:** `build.sh` (Linux/macOS) / `build.ps1` (Windows) — builds Go binary + Tauri installer
 - **CI/CD:** GitHub Actions (`.github/workflows/release.yml`) — builds all 3 platforms on tag push
@@ -119,7 +119,7 @@ All configuration is hardcoded in `config.Default()` in Go. No config file neede
 | `--port` | `3721` | Backend HTTP port |
 | `--data-dir` | `data` | Directory for database and logs |
 | LLM enabled | `true` | Guard + refinement |
-| Ollama URL | `http://localhost:11434` | Ollama server |
+| Ollama URL | `http://127.0.0.1:11434` | Ollama server |
 | Chat model | `deepseek-r1:1.5b` | Model for guard + refinement |
 | Embed model | `nomic-embed-text:latest` | Model for embeddings strategy |
 | Strategy | `content_tfidf` | `content_tfidf` or `embeddings` |
@@ -139,6 +139,8 @@ All routes are prefixed with `/api`. Server listens on `127.0.0.1:3721`.
 | `GET/PATCH/DELETE` | `/api/suggestions/{id}` | Get / update / delete a suggestion |
 | `POST` | `/api/suggestions/{id}/materialize` | Accept and materialize to disk |
 | `POST` | `/api/intelligence/guard/run` | Run folder guard classification |
+| `POST` | `/api/intelligence/llm/setup` | Start LLM setup (download + start Ollama, pull model) |
+| `GET` | `/api/intelligence/llm/setup-status` | LLM setup progress |
 | `POST` | `/api/intelligence/files/extract-orphans` | Extract orphan file content |
 | `POST` | `/api/intelligence/folders/suggestions` | Generate folder suggestions |
 | `POST` | `/api/intelligence/refine/folder/{id}` | LLM refine a suggestion name |
@@ -207,6 +209,7 @@ owl/
 │   │   ├── intelligence/     # TF-IDF, strategies, suggester
 │   │   ├── llm/              # Ollama LLM client
 │   │   ├── logging/          # Structured logging (tint + file)
+│   │   ├── ollama/           # Ollama lifecycle manager (download, start, pull)
 │   │   ├── scanner/          # Filesystem walker
 │   │   ├── store/            # SQLite CRUD queries
 │   │   └── vector/           # Cosine similarity, vector math
@@ -229,10 +232,8 @@ owl/
 │   ├── vite.config.ts        # Vite config with /api proxy
 │   └── package.json
 ├── data/                     # Runtime data (gitignored)
-└── VISION.md                 # Design document
 ```
 
 ## TODO
 
 - **Media support** — EXIF, audio/video metadata extraction
-- **Content_tfidf only as default** — embeddings strategy requires an Ollama embedding model
