@@ -11,27 +11,45 @@
 │                     │ HTTP :3721               │
 │  ┌──────────────────▼──────────────────────┐  │
 │  │      Go Backend (Tauri sidecar)         │  │
-│  │  ┌──────────┐  ┌──────────────────┐    │  │
-│  │  │ HTTP API │  │ LLM subprocess   │    │  │
-│  │  │ serve    │  │ manager          │    │  │
-│  │  │ frontend │  │ (start/health/   │    │  │
-│  │  │ (dev)    │  │  kill)           │    │  │
-│  │  └──────────┘  └──────┬───────────┘    │  │
-│  └───────────────────────┼─────────────────┘  │
-│                          │ HTTP :1234          │
-│  ┌───────────────────────▼──────────────────┐  │
+│  │  ┌─────────────────────────────────┐   │  │
+│  │  │ HTTP API (127.0.0.1:3721)       │   │  │
+│  │  │ Routes under /api prefix        │   │  │
+│  │  │ SQLite DB + file extraction     │   │  │
+│  │  └─────────────────────────────────┘   │  │
+│  └──────────────────┬──────────────────────┘  │
+│                     │                         │
+│  (optional)         │ HTTP :1234               │
+│  ┌──────────────────▼──────────────────────┐  │
 │  │  llama-server (bundled, ~50MB binary)    │  │
-│  │  + model.gguf (downloaded on first run)  │  │
+│  │  + model.gguf (downloaded on first run) │  │
 │  └──────────────────────────────────────────┘  │
 │                                                │
-│  Installer: ~100MB (Go + llama-server binary)  │
-│  First-run download: ~1GB (model file)          │
+│  Data stored at <install-dir>/data/            │
+│  (next to the installed .exe)                 │
 └────────────────────────────────────────────────┘
 ```
 
+## Current Implementation Status
+
+### ✅ Implemented
+
+- **Go backend** with `--port` and `--data-dir` CLI flags
+- **API routes** mounted under `/api` prefix via `http.StripPrefix`
+- **Tauri sidecar** — Go binary registered as `externalBin` in `tauri.conf.json`
+- **Sidecar lifecycle** — Tauri spawns Go on startup, kills on window close
+- **Frontend BASE** auto-detects Tauri vs browser (`window.__TAURI_INTERNALS__`)
+- **Browse button** — native folder picker via `@tauri-apps/plugin-dialog`, with `<input webkitdirectory>` fallback
+- **Build scripts** — `build.sh` (Linux/macOS) and `build.ps1` (Windows)
+- **GitHub Actions release workflow** — `.github/workflows/release.yml` builds all 3 platforms on tag push
+- **Data directory** — stored at `<install-dir>/data/` (next to the exe in the installed app, or `backend/data/` in dev)
+
+### 🚧 Future (llama-server bundling)
+
+LLM integration is optional and not bundled in the installer. Users currently need their own LM Studio endpoint. The sections below describe the planned first-run flow for bundled model support.
+
 ## LLM Strategy Decision
 
-Two competing approaches for the organization backend. Need to settle before shipping.
+Two competing approaches for the organization backend.
 
 ### Content TF-IDF (current default)
 
@@ -57,10 +75,10 @@ Ship with **content_tfidf** as the only strategy. It works immediately, no model
 
 If embeddings strategy is kept, the embedding model would be downloaded alongside the chat model on first run (~400MB extra).
 
-## First-Run Flow
+## First-Run Flow (with bundled llama-server)
 
 ```
-User installs (100MB) → Launches app
+User installs (30MB without llama-server / 100MB with) → Launches app
   → Tauri starts Go sidecar
   → Go checks: is llama-server running on :1234?
   → No? Look for bundled llama-server
@@ -105,33 +123,23 @@ Pre-built `llama-server` binaries from llama.cpp releases (MIT license):
 
 Bundled inside the Tauri installer alongside the Go binary. Placed in the app's resources directory at runtime.
 
-## Go Sidecar
+## Go Sidecar (implemented)
 
 ### Tauri sidecar config
 
-- Go binary registered as a Tauri sidecar in `tauri.conf.json`
-- Passed flags: `--port 3721 --data-dir "$APPDATA/owl/data" --models-dir "$APPDATA/owl/models"`
-- Tauri spawns on app start, kills on app close
-- Tauri waits for health check (`GET /health` → 200) before showing window
+- Go binary registered as a Tauri sidecar in `tauri.conf.json`: `"externalBin": ["binaries/owl-backend"]`
+- Binary placed at `src-tauri/binaries/owl-backend-<target-triple>`.exe (built by `build.sh`/`build.ps1`)
+- Passed flags: `--port 3721 --data-dir <app-dir>/data`
+  - In dev: `--data-dir` resolves to `backend/data/` relative to project root
+  - In production: resolves to `<install-dir>/data/` (next to the exe)
+- Tauri spawns on app start via `tauri_plugin_shell`
+- Tauri kills on close via `CommandChild::kill()` in `on_window_event`
 
-### Go backend changes needed
-
-- Add subprocess manager for llama-server:
-  - `cmd/llm/start` — locate + spawn llama-server
-  - `cmd/llm/stop` — graceful kill
-  - `cmd/llm/health` — poll `/v1/models`
-  - `cmd/llm/download` — download model from Hugging Face with progress
-- Add `--models-dir` flag to main CLI
-- Embed frontend dist (for dev mode without Tauri)
-- On startup: if llama-server not running, start it; if model missing, show "downloading" state via API
-
-### Graceful degradation
+### Graceful degradation (when LLM is unavailable)
 
 | LLM State | App State |
 |-----------|-----------|
-| Not downloaded yet | "Downloading AI model…" splash |
-| Downloading | Progress bar, block guard + refine |
-| Starting | Show spinner on guard/refine buttons |
+| Not configured | Yellow "LLM not available" banner, guard/refine disabled |
 | Running | Full functionality |
 | Crashed mid-session | Disable guard/refine, show error, offer restart |
 
@@ -139,28 +147,30 @@ The suggestion pipeline (TF-IDF) works without the LLM. Only guard classificatio
 
 ## Build & CI
 
-### Build environment
+### Build scripts
 
-Current blocker: WSL lacks `libwebkit2gtk-4.1-dev` and other Tauri dependencies.
+- **`build.sh`** (Linux/macOS) and **`build.ps1`** (Windows) automate the full pipeline:
+  1. Build Go backend sidecar → output to `src-tauri/binaries/`
+  2. Run `pnpm tauri build` (which triggers `beforeBuildCommand` → `pnpm build`)
 
-Options:
+### GitHub Actions (`.github/workflows/release.yml`)
 
-1. **Native Linux VM / dual-boot** — simplest, full Linux Tauri build
-2. **Docker build container** — reproducible, works from WSL
-3. **cross-compile from Windows** — Tauri cross-compile is complex, not recommended
-4. **GitHub Actions CI** — Ubuntu runner has all deps, auto-builds on tag push
+Triggered on `v*` tag push or manual dispatch. Matrix build across 3 platforms:
 
-### Recommended CI flow (GitHub Actions)
+| Platform | Runner | Target triple | Installer |
+|----------|--------|---------------|-----------|
+| Windows | `windows-latest` | `x86_64-pc-windows-msvc` | `.msi` |
+| Linux | `ubuntu-latest` | `x86_64-unknown-linux-gnu` | `.deb` + `.AppImage` |
+| macOS | `macos-latest` | `aarch64-apple-darwin` | `.dmg` |
 
-```
-Tag push v0.1.0
-  → Build Go binary (linux/amd64, windows/amd64, darwin/arm64)
-  → Download llama-server binary for each platform
-  → Build frontend (pnpm build)
-  → Build Tauri (.deb, .AppImage, .msi, .dmg)
-  → Attach model download URL
-  → Upload artifacts
-```
+Steps per platform:
+1. Install system deps (Linux: webkit2gtk, etc.)
+2. Setup Go + Rust + Node + pnpm with caching
+3. Build Go sidecar into `binaries/`
+4. `pnpm tauri build` (frontend built automatically via `beforeBuildCommand`)
+5. Upload installer artifact
+
+A final `release` job collects all artifacts and creates a GitHub Release with `softprops/action-gh-release`.
 
 ### Windows signing
 
@@ -173,12 +183,13 @@ Tag push v0.1.0
 | Component | Size |
 |-----------|------|
 | Go binary | ~20MB |
-| llama-server binary | ~50MB (single platform) |
+| (future) llama-server binary | ~50MB (single platform) |
 | Frontend assets | ~200KB |
 | Tauri runtime | ~10MB |
-| **Total installer** | **~80-100MB** (per platform) |
+| **Current installer** (no llama-server) | **~30MB** |
+| **Future installer** (with llama-server) | **~80-100MB** |
 
-Model downloaded on first run: ~950MB extra.
+Model downloaded on first run: ~950MB extra (for bundled LLM).
 
 ## Unresolved Questions (Decide Before Shipping)
 
