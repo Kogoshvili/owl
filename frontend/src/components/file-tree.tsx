@@ -1,4 +1,4 @@
-import { useState } from "preact/hooks"
+import { useState, useRef } from "preact/hooks"
 import { type PhysicalFolder, type WatchedDir } from "../api"
 import type { UseMutationResult } from "@tanstack/preact-query"
 import { usePhysicalFolders, useFolderGuards, useSetFolderGuard } from "../hooks/queries"
@@ -16,6 +16,7 @@ export function FileTree({ dirs, addMutation, scanMutation, deleteMutation, anyR
 
   const [addPath, setAddPath] = useState("")
   const [addError, setAddError] = useState("")
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
   const guardMap = folderGuardsQuery.data ? folderGuardsQuery.data.reduce((acc, g) => {
     acc[g.path] = g.guarded
@@ -42,6 +43,32 @@ export function FileTree({ dirs, addMutation, scanMutation, deleteMutation, anyR
     if (e.key === "Enter") handleAdd()
   }
 
+  const handleBrowse = async () => {
+    if ((window as any).__TAURI_INTERNALS__) {
+      try {
+        const { open } = await import("@tauri-apps/plugin-dialog")
+        const selected = await open({ directory: true, multiple: false, title: "Select directory to watch" })
+        if (selected) setAddPath(selected)
+      } catch {
+        fileInputRef.current?.click()
+      }
+    } else {
+      fileInputRef.current?.click()
+    }
+  }
+
+  const handleFileInput = (e: Event) => {
+    const input = e.target as HTMLInputElement
+    if (input.files?.length) {
+      const path = input.files[0].webkitRelativePath
+      const slash = path.indexOf("/")
+      if (slash > 0) {
+        setAddPath(path.substring(0, slash))
+      }
+    }
+    input.value = ""
+  }
+
   const findWatchedDir = (folderPath: string): WatchedDir | undefined => {
     const normalized = folderPath.replace(/[\\/]+$/, "").replace(/\\/g, "/")
     return dirs.find(d => d.path.replace(/[\\/]+$/, "").replace(/\\/g, "/") === normalized)
@@ -61,9 +88,10 @@ export function FileTree({ dirs, addMutation, scanMutation, deleteMutation, anyR
         <button class="btn btn-primary" onClick={handleAdd} disabled={addMutation.isPending || !addPath.trim()}>
           {addMutation.isPending ? "..." : "Add"}
         </button>
-        <button class="btn" disabled title="Requires Tauri desktop app">
+        <button class="btn" onClick={handleBrowse}>
           Browse
         </button>
+        <input type="file" ref={fileInputRef} style="display:none" webkitdirectory onChange={handleFileInput} />
       </div>
 
       {addError && <div class="error-msg">{addError}</div>}

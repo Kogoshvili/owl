@@ -15,7 +15,33 @@ function AcceptModal({ suggestion, onAccept, onClose }: {
 }) {
   const [dest, setDest] = useState("")
   const [folderName, setFolderName] = useState(suggestion.name)
+  const fileInputRef = useRef<HTMLInputElement>(null)
   useEffect(() => { desktopDir().then(setDest).catch(() => {}) }, [])
+
+  const handleBrowseDest = async () => {
+    if ((window as any).__TAURI_INTERNALS__) {
+      try {
+        const { open } = await import("@tauri-apps/plugin-dialog")
+        const selected = await open({ directory: true, multiple: false, title: "Select destination directory" })
+        if (selected) setDest(selected)
+      } catch {
+        fileInputRef.current?.click()
+      }
+    } else {
+      fileInputRef.current?.click()
+    }
+  }
+
+  const handleFileInput = (e: Event) => {
+    const input = e.target as HTMLInputElement
+    if (input.files?.length) {
+      const path = input.files[0].webkitRelativePath
+      const slash = path.indexOf("/")
+      if (slash > 0) setDest(path.substring(0, slash))
+    }
+    input.value = ""
+  }
+
   return (
     <div class="modal-overlay" onClick={onClose}>
       <div class="modal" onClick={(e) => e.stopPropagation()}>
@@ -28,7 +54,11 @@ function AcceptModal({ suggestion, onAccept, onClose }: {
           </label>
           <label>
             Save to
-            <input type="text" value={dest} onInput={(e) => setDest((e.target as HTMLInputElement).value)} placeholder="~/Owl-organized (default)" />
+            <div style="display:flex;gap:6px">
+              <input type="text" value={dest} onInput={(e) => setDest((e.target as HTMLInputElement).value)} placeholder="~/Owl-organized (default)" style="flex:1" />
+              <button type="button" class="btn btn-sm" onClick={handleBrowseDest}>Browse</button>
+            </div>
+            <input type="file" ref={fileInputRef} style="display:none" webkitdirectory onChange={handleFileInput} />
           </label>
           <div class="modal-actions">
             <button type="submit" class="btn btn-primary">Accept & Materialize</button>
@@ -204,9 +234,23 @@ export function HomePage() {
 
   return (
     <div class="page">
+      <div class="process-banner">
+        <strong>How it works:</strong><br />
+        ① Add directories — type a path or use Browse to select folders to organize<br />
+        ② Auto Guard — automatically checks if a folder is coherent (files belong together).
+          Coherent folders are SKIPPED — their content won't be used for suggestions.
+          Incoherent folders are OPEN for extraction. Click 🔒/🔓 on any folder to override<br />
+        ③ Extract — reads content from supported file types (.txt, .md, .py, .pdf, etc.)
+          to extract keywords, metadata, and structure. Even unsupported files still contribute
+          their filename and extension tags — extraction is extra content that improves
+          similarity analysis for better groupings<br />
+        ④ Generate — creates folder suggestions by clustering related files together<br />
+        ⑤ Accept — click a suggestion to materialize the folder on disk
+      </div>
+
       {!llmAvailable && (
         <div class="llm-banner">
-          LLM not available. Folder guard, refinement, and embeddings strategy are disabled.
+          LLM not available. Auto Folder Guard, refinement, and embeddings strategy are disabled.
           {llmQuery.isLoading && " Checking…"}
         </div>
       )}
@@ -224,7 +268,7 @@ export function HomePage() {
       <div class="files-pipeline-bar">
         <div class="pipeline-actions">
           <button class="btn btn-sm" onClick={handleGuard} disabled={anyRunning || !llmAvailable} title={!llmAvailable ? "Requires LLM" : "Mark folders to be skipped during organization"}>
-            {guardStatusQ.data?.running ? "Guarding…" : "1. Guard (skip folders)"}
+            {guardStatusQ.data?.running ? "Guarding…" : "1. Auto Guard (skip folders)"}
           </button>
           <span class="step-arrow">→</span>
           <button class="btn btn-sm" onClick={handleExtract} disabled={anyRunning} title="Scan unprocessed file contents for keywords">

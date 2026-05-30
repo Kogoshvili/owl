@@ -792,3 +792,14 @@ tbody tr:hover {
 .text-muted {
   opacity: 0.5;
 }
+
+.process-banner {
+  padding: 10px 14px;
+  margin-bottom: 12px;
+  border: 1px solid var(--accent);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+  color: var(--text-h);
+  font-size: 0.82rem;
+  line-height: 1.6;
+}
