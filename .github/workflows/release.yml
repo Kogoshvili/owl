@@ -6,41 +6,11 @@ on:
 
 jobs:
   build:
-    strategy:
-      matrix:
-        include:
-          - os: windows-latest
-            target: x86_64-pc-windows-msvc
-            ext: .exe
-            installer: frontend/src-tauri/target/release/bundle/msi/Owl_*.msi
-          - os: ubuntu-latest
-            target: x86_64-unknown-linux-gnu
-            ext: ""
-            installer: |
-              frontend/src-tauri/target/release/bundle/deb/*.deb
-              frontend/src-tauri/target/release/bundle/appimage/*.AppImage
-          - os: macos-latest
-            target: aarch64-apple-darwin
-            ext: ""
-            installer: frontend/src-tauri/target/release/bundle/dmg/*.dmg
-
-    runs-on: ${{ matrix.os }}
+    runs-on: windows-latest
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-
-      - name: Install Linux system dependencies
-        if: runner.os == 'Linux'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-            libwebkit2gtk-4.1-dev \
-            libgtk-3-dev \
-            libsoup-3.0-dev \
-            libjavascriptcoregtk-4.1-dev \
-            librsvg2-dev \
-            patchelf
 
       - name: Setup Go
         uses: actions/setup-go@v5
@@ -53,6 +23,8 @@ jobs:
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
+        with:
+          version: "11"
 
       - name: Setup Node
         uses: actions/setup-node@v4
@@ -69,7 +41,7 @@ jobs:
         run: |
           mkdir -p frontend/src-tauri/binaries
           cd backend
-          go build -o "../frontend/src-tauri/binaries/owl-backend-${{ matrix.target }}${{ matrix.ext }}" ./cmd/owl
+          go build -o "../frontend/src-tauri/binaries/owl-backend-x86_64-pc-windows-msvc.exe" ./cmd/owl
 
       - name: Build Tauri installer
         run: pnpm tauri build
@@ -78,8 +50,8 @@ jobs:
       - name: Upload installer artifact
         uses: actions/upload-artifact@v4
         with:
-          name: installer-${{ runner.os }}
-          path: "${{ matrix.installer }}"
+          name: installer-Windows
+          path: frontend/src-tauri/target/release/bundle/msi/Owl_*.msi
 
   release:
     needs: [build]
@@ -96,5 +68,5 @@ jobs:
       - name: Create release
         uses: softprops/action-gh-release@v2
         with:
-          files: artifacts/**/*
+          files: artifacts/**/*.msi
           generate_release_notes: true
