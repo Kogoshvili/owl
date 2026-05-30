@@ -403,6 +403,7 @@ export interface RunningStatus {
 }
 
 export interface ProcessingStats {
+  total_files: number
   guarded: number
   open: number
   extractable: number

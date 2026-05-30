@@ -55,6 +55,7 @@ export function useAddWatchedDir() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["watchedDirs"] })
       qc.invalidateQueries({ queryKey: ["scanStatus"] })
+      qc.invalidateQueries({ queryKey: ["processingStats"] })
     },
   })
 }
@@ -66,6 +67,7 @@ export function useScanDir() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["watchedDirs"] })
       qc.invalidateQueries({ queryKey: ["scanStatus"] })
+      qc.invalidateQueries({ queryKey: ["processingStats"] })
     },
   })
 }
@@ -368,6 +370,7 @@ function useRunningStatus(key: string, fn: () => Promise<RunningStatus>) {
   return useQuery({
     queryKey: [key],
     queryFn: fn,
+    staleTime: 0,
     refetchInterval: (data) => (data?.running ? 2000 : 30000),
   })
 }

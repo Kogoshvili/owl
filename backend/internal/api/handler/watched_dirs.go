@@ -3,6 +3,7 @@ package handler
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"log/slog"
 	"net/http"
 
@@ -62,6 +63,12 @@ func (h *WatchedDirHandler) Create(w http.ResponseWriter, r *http.Request) {
 	slog.Info("starting background scan", "dir", dir.Path, "dir_id", dir.ID)
 	h.scanTracker.clear()
 	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				slog.Error("scan panicked", "dir", dir.Path, "panic", r)
+				h.scanTracker.error(fmt.Sprintf("Scan panicked: %v", r))
+			}
+		}()
 		h.scanTracker.update("scanning", "Scanning directory", 0, 0)
 		if err := h.scanner.Scan(context.Background(), dir.Path, dir.ID); err != nil {
 			h.scanTracker.error("Scan failed: " + err.Error())
@@ -129,6 +136,12 @@ func (h *WatchedDirHandler) Scan(w http.ResponseWriter, r *http.Request) {
 	slog.Info("starting background scan", "dir", dir.Path, "dir_id", dir.ID)
 	h.scanTracker.clear()
 	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				slog.Error("scan panicked", "dir", dir.Path, "panic", r)
+				h.scanTracker.error(fmt.Sprintf("Scan panicked: %v", r))
+			}
+		}()
 		h.scanTracker.update("scanning", "Scanning directory", 0, 0)
 		if err := h.scanner.Scan(context.Background(), dir.Path, dir.ID); err != nil {
 			h.scanTracker.error("Scan failed: " + err.Error())

@@ -947,17 +947,6 @@ tbody tr:hover {
   opacity: 0.7;
 }
 
-/* Operation Progress */
-.operation-progress {
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  padding: 6px 10px;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-top: 8px;
-}
-
 .progress-bar {
   flex: 1;
   height: 4px;
@@ -1235,6 +1224,14 @@ tbody tr:hover {
   }
 }
 
+/* Step arrows */
+.step-arrow {
+  color: var(--text);
+  opacity: 0.4;
+  font-size: 0.9rem;
+  margin: 0 -2px;
+}
+
 /* Strategy Select */
 .strategy-select {
   font-size: 0.82rem;
@@ -1244,6 +1241,7 @@ tbody tr:hover {
   background: var(--bg);
   color: var(--text-h);
   flex-shrink: 0;
+  margin-left: 4px;
 }
 
 .strategy-select:disabled {
@@ -1263,16 +1261,19 @@ tbody tr:hover {
 
 .pipeline-actions {
   display: flex;
+  align-items: center;
   gap: 6px;
 }
 
-.pipeline-status {
-  margin-left: auto;
+.stats-bar {
   display: flex;
+  align-items: center;
   gap: 6px;
-  font-size: 0.82rem;
+  margin-bottom: 12px;
+  padding: 4px 12px;
+  font-size: 0.78rem;
   color: var(--text);
-  opacity: 0.8;
+  flex-wrap: wrap;
 }
 
 .text-muted {

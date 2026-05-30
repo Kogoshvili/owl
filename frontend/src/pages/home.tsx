@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from "preact/hooks"
 import { desktopDir } from "@tauri-apps/api/path"
-import { useWatchedDirs, useAddWatchedDir, useScanDir, useDeleteDir, useRunGuard, useExtractOrphans, useProcessingStats, useGuardStatus, useGenStatus, useScanStatus, useExtractStatus, useLlmStatus, useFolderSuggestions, useGenerateSuggestions, useDismissSuggestion, useRefineSuggestion, useRefineAllSuggestions, useAcceptSuggestion } from "../hooks/queries"
+import { useQueryClient } from "@tanstack/preact-query"
+import { useWatchedDirs, useAddWatchedDir, useScanDir, useDeleteDir, useRunGuard, useExtractOrphans, useProcessingStats, useGuardStatus, useGenStatus, useScanStatus, useExtractStatus, useLlmStatus, useFolderSuggestions, useGenerateSuggestions, useDismissSuggestion, useRefineAllSuggestions, useAcceptSuggestion } from "../hooks/queries"
 import { useToast } from "../hooks/toast"
 import { FileTree } from "../components/file-tree"
 import { ProgressBar } from "../components/progress-bar"
@@ -39,15 +40,12 @@ function AcceptModal({ suggestion, onAccept, onClose }: {
   )
 }
 
-function SuggestionCard({ suggestion, onDismiss, onRefine, onAccept, dismissing, refining, isMaterializing, llmAvailable }: {
+function SuggestionCard({ suggestion, onDismiss, onAccept, dismissing, isMaterializing }: {
   suggestion: FolderSuggestionDisplay
   onDismiss: () => void
-  onRefine: () => void
   onAccept: () => void
   dismissing: boolean
-  refining: boolean
   isMaterializing: boolean
-  llmAvailable: boolean
 }) {
   return (
     <div class="suggestion-card" onClick={() => route(`/suggestions/${suggestion.id}`)}>
@@ -73,9 +71,6 @@ function SuggestionCard({ suggestion, onDismiss, onRefine, onAccept, dismissing,
         <button class="btn btn-sm btn-primary" onClick={onAccept} disabled={isMaterializing}>
           {isMaterializing ? "Moving…" : "Accept"}
         </button>
-        <button class="btn btn-sm" onClick={onRefine} disabled={refining || !llmAvailable} title={!llmAvailable ? "Requires LLM" : ""}>
-          {refining ? "Refining…" : "Refine"}
-        </button>
         <button class="btn btn-sm btn-danger" onClick={onDismiss} disabled={dismissing}>
           Dismiss
         </button>
@@ -97,7 +92,6 @@ export function HomePage() {
   const suggestionsQuery = useFolderSuggestions()
   const generateMutation = useGenerateSuggestions()
   const dismissMutation = useDismissSuggestion()
-  const refineMutation = useRefineSuggestion()
   const refineAllMutation = useRefineAllSuggestions()
   const acceptMutation = useAcceptSuggestion()
 
@@ -105,8 +99,26 @@ export function HomePage() {
   const extractStatusQ = useExtractStatus()
   const guardStatusQ = useGuardStatus()
   const genStatusQ = useGenStatus()
+  const qc = useQueryClient()
 
-  const [refiningId, setRefiningId] = useState<number | null>(null)
+  const prevScanRunning = useRef(false)
+  useEffect(() => {
+    if (prevScanRunning.current && !scanStatusQ.data?.running) {
+      qc.invalidateQueries({ queryKey: ["physicalFolders"] })
+      qc.invalidateQueries({ queryKey: ["folderGuards"] })
+    }
+    prevScanRunning.current = !!scanStatusQ.data?.running
+  }, [scanStatusQ.data?.running, qc])
+
+  const prevGenRunning = useRef(false)
+  useEffect(() => {
+    if (prevGenRunning.current && !genStatusQ.data?.running) {
+      qc.invalidateQueries({ queryKey: ["folderSuggestions"] })
+      qc.invalidateQueries({ queryKey: ["suggestions"] })
+    }
+    prevGenRunning.current = !!genStatusQ.data?.running
+  }, [genStatusQ.data?.running, qc])
+
   const [acceptingId, setAcceptingId] = useState<number | null>(null)
   const [strategy, setStrategy] = useState("content_tfidf")
 
@@ -165,16 +177,6 @@ export function HomePage() {
     } catch (e: any) { toast.show({ type: "error", message: e.message }) }
   }
 
-  const handleRefine = async (id: number) => {
-    if (!llmAvailable) { toast.show({ type: "error", message: "LLM not available for refinement" }); return }
-    setRefiningId(id)
-    try {
-      await refineMutation.mutateAsync(id)
-      toast.show({ type: "success", message: "Suggestion refined" })
-    } catch (e: any) { toast.show({ type: "error", message: e.message }) }
-    finally { setRefiningId(null) }
-  }
-
   const handleAccept = async (id: number, destination: string, name: string) => {
     setAcceptingId(id)
     try {
@@ -209,44 +211,6 @@ export function HomePage() {
         </div>
       )}
 
-      <div class="files-pipeline-bar">
-        <div class="pipeline-actions">
-          <button class="btn btn-sm" onClick={handleGuard} disabled={anyRunning || !llmAvailable} title={!llmAvailable ? "Requires LLM" : ""}>
-            {guardStatusQ.data?.running ? "Guarding…" : "Guard Folders"}
-          </button>
-          <button class="btn btn-sm" onClick={handleExtract} disabled={anyRunning}>
-            {extractStatusQ.data?.running ? "Extracting…" : "Extract Orphans"}
-          </button>
-          <select class="strategy-select" value={strategy} onChange={(e) => setStrategy((e.target as HTMLSelectElement).value)}>
-            <option value="content_tfidf">content_tfidf</option>
-            <option value="embeddings" disabled={!llmAvailable}>embeddings{!llmAvailable ? " (requires LLM)" : ""}</option>
-          </select>
-          <button class="btn btn-sm btn-primary" onClick={handleGenerate} disabled={anyRunning}>
-            {genStatusQ.data?.running ? "Generating…" : "Generate"}
-          </button>
-        </div>
-        <div class="pipeline-status">
-          {stats && (
-            <>
-              <span>{stats.guarded} guarded</span><span class="text-muted">·</span>
-              <span>{stats.open} open</span><span class="text-muted">·</span>
-              <span>{stats.extractable} extractable</span><span class="text-muted">·</span>
-              <span>{stats.queued} queued</span><span class="text-muted">·</span>
-              <span>{stats.processing} processing</span><span class="text-muted">·</span>
-              <span>{stats.processed} extracted</span><span class="text-muted">·</span>
-              <span>{stats.failed} failed</span>
-            </>
-          )}
-          {statsQuery.isLoading && <span>Loading stats…</span>}
-          {statsQuery.isError && <span class="error-msg">Failed to load stats</span>}
-        </div>
-      </div>
-
-      <ProgressBar running={scanStatusQ.data?.running ?? false} progress={scanStatusQ.data?.progress} total={scanStatusQ.data?.total} message={scanStatusQ.data?.message} />
-      <ProgressBar running={extractStatusQ.data?.running ?? false} progress={extractStatusQ.data?.progress} total={extractStatusQ.data?.total} message={extractStatusQ.data?.message} />
-      <ProgressBar running={guardStatusQ.data?.running ?? false} progress={guardStatusQ.data?.progress} total={guardStatusQ.data?.total} message={guardStatusQ.data?.message} />
-      <ProgressBar running={genStatusQ.data?.running ?? false} progress={genStatusQ.data?.progress} total={genStatusQ.data?.total} message={genStatusQ.data?.message} />
-
       <div class="section">
         <FileTree
           dirs={dirs}
@@ -256,6 +220,52 @@ export function HomePage() {
           anyRunning={anyRunning}
         />
       </div>
+
+      <div class="files-pipeline-bar">
+        <div class="pipeline-actions">
+          <button class="btn btn-sm" onClick={handleGuard} disabled={anyRunning || !llmAvailable} title={!llmAvailable ? "Requires LLM" : "Mark folders to be skipped during organization"}>
+            {guardStatusQ.data?.running ? "Guarding…" : "1. Guard (skip folders)"}
+          </button>
+          <span class="step-arrow">→</span>
+          <button class="btn btn-sm" onClick={handleExtract} disabled={anyRunning} title="Scan unprocessed file contents for keywords">
+            {extractStatusQ.data?.running ? "Extracting…" : "2. Extract Orphans"}
+          </button>
+          <span class="step-arrow">→</span>
+          <button class="btn btn-sm btn-primary" onClick={handleGenerate} disabled={anyRunning} title="Create folder suggestions from analyzed content">
+            {genStatusQ.data?.running ? "Generating…" : "3. Generate Suggestions"}
+          </button>
+          <select class="strategy-select" value={strategy} onChange={(e) => setStrategy((e.target as HTMLSelectElement).value)}>
+            <option value="content_tfidf">content_tfidf</option>
+            <option value="embeddings" disabled={!llmAvailable}>embeddings{!llmAvailable ? " (requires LLM)" : ""}</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="stats-bar">
+        {stats && (
+          <>
+            <span>{stats.total_files} files</span><span class="text-muted">·</span>
+            <span>{stats.guarded} guarded</span><span class="text-muted">·</span>
+            <span>{stats.open} open</span><span class="text-muted">·</span>
+            <span>{stats.extractable} extractable</span><span class="text-muted">·</span>
+            <span>{stats.queued} queued</span><span class="text-muted">·</span>
+            <span>{stats.processing} processing</span><span class="text-muted">·</span>
+            <span>{stats.processed} extracted</span><span class="text-muted">·</span>
+            <span>{stats.failed} failed</span>
+          </>
+        )}
+        {statsQuery.isLoading && <span>Loading stats…</span>}
+        {statsQuery.isError && <span class="error-msg">Failed to load stats</span>}
+      </div>
+
+      {(() => {
+        const op = scanStatusQ.data?.running ? { ...scanStatusQ.data, label: "Scanning new files..." }
+          : extractStatusQ.data?.running ? { ...extractStatusQ.data, label: "Extracting orphans..." }
+          : guardStatusQ.data?.running ? { ...guardStatusQ.data, label: "Guarding folders..." }
+          : genStatusQ.data?.running ? { ...genStatusQ.data, label: "Generating suggestions..." }
+          : null
+        return op ? <ProgressBar running={true} progress={op.progress} total={op.total} message={op.label} /> : null
+      })()}
 
       <div class="section">
         <h2 class="section-title">Suggestions</h2>
@@ -280,12 +290,9 @@ export function HomePage() {
                 key={s.id}
                 suggestion={s}
                 onDismiss={() => handleDismiss(s.id)}
-                onRefine={() => handleRefine(s.id)}
                 onAccept={() => setAcceptingId(s.id)}
                 dismissing={dismissMutation.isPending}
-                refining={refiningId === s.id}
                 isMaterializing={acceptMutation.isPending && acceptingId === s.id}
-                llmAvailable={llmAvailable}
               />
             ))}
           </div>

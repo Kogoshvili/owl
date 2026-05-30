@@ -204,6 +204,12 @@ func (h *IntelligenceHandler) GenerateSuggestions(w http.ResponseWriter, r *http
 }
 
 func (h *IntelligenceHandler) generateSuggestionsAsync(ctx context.Context, minFiles int, minSimilarity float64, strategyID intelligence.StrategyID) {
+	defer func() {
+		if r := recover(); r != nil {
+			slog.Error("generation panicked", "panic", r)
+			h.genTracker.error(fmt.Sprintf("Generation panicked: %v", r))
+		}
+	}()
 	slog.Info("async generation started", "min_files", minFiles, "min_similarity", minSimilarity, "strategy", strategyID)
 	start := time.Now()
 	h.genTracker.update("initializing", "Clearing old suggestions", 0, 1)
@@ -717,6 +723,12 @@ func (h *IntelligenceHandler) RunGuard(w http.ResponseWriter, r *http.Request) {
 	h.guardTracker.clear()
 
 	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				slog.Error("guard panicked", "panic", r)
+				h.guardTracker.error(fmt.Sprintf("Guard panicked: %v", r))
+			}
+		}()
 		h.guardTracker.update("listing", "Listing folders", 0, 1)
 		trees, err := h.store.ListPhysicalFoldersAll()
 		if err != nil {
@@ -800,6 +812,12 @@ func (h *IntelligenceHandler) ExtractOrphans(w http.ResponseWriter, r *http.Requ
 	h.extractTracker.clear()
 
 	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				slog.Error("extract orphans panicked", "panic", r)
+				h.extractTracker.error(fmt.Sprintf("Extract orphans panicked: %v", r))
+			}
+		}()
 		h.extractTracker.update("listing", "Listing folders", 0, 1)
 		trees, err := h.store.ListPhysicalFoldersAll()
 		if err != nil {
@@ -916,6 +934,11 @@ func (h *IntelligenceHandler) RefineFolder(w http.ResponseWriter, r *http.Reques
 	slog.Info("llm: starting refine suggestion", "id", id, "name", suggestion.Name, "files", len(fileIDs))
 
 	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				slog.Error("refine suggestion panicked", "id", id, "panic", r)
+			}
+		}()
 		corpusKeywords, err := h.analyzer.BuildCorpusTFIDF(fileIDs)
 		if err != nil {
 			slog.Error("llm: refine suggestion failed to build corpus", "id", id, "error", err)
@@ -1086,6 +1109,7 @@ func (h *IntelligenceHandler) GetUnprocessedCount(w http.ResponseWriter, r *http
 }
 
 type processingStats struct {
+	TotalFiles  int `json:"total_files"`
 	Guarded     int `json:"guarded"`
 	Open        int `json:"open"`
 	Extractable int `json:"extractable"`
@@ -1098,6 +1122,7 @@ type processingStats struct {
 func (h *IntelligenceHandler) GetProcessingStats(w http.ResponseWriter, r *http.Request) {
 	var stats processingStats
 
+	h.store.Db().QueryRow(`SELECT COUNT(*) FROM files WHERE status = 'active'`).Scan(&stats.TotalFiles)
 	h.store.Db().QueryRow(`SELECT COUNT(*) FROM files WHERE status = 'active' AND processing_status = 'unprocessed' AND LOWER(extension) IN `+store.SupportedExtsSQL).Scan(&stats.Extractable)
 	h.store.Db().QueryRow(`SELECT COUNT(*) FROM files WHERE status = 'active' AND processing_status = 'queued'`).Scan(&stats.Queued)
 	h.store.Db().QueryRow(`SELECT COUNT(*) FROM files WHERE status = 'active' AND processing_status = 'processing'`).Scan(&stats.Processing)
