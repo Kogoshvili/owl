@@ -57,8 +57,8 @@ export function getWatchedDirs(): Promise<WatchedDir[]> {
   return request<WatchedDir[]>("/watched-directories")
 }
 
-export function addWatchedDir(path: string): Promise<WatchedDir> {
-  return request<WatchedDir>("/watched-directories", {
+export function addWatchedDir(path: string): Promise<{id: number}> {
+  return request<{id: number}>("/watched-directories", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ path }),

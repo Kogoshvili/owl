@@ -2,7 +2,9 @@ package handler
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -13,10 +15,11 @@ import (
 )
 
 type WatchedDirHandler struct {
-	store       *store.Store
-	scanner     *scanner.Scanner
-	extractor   *extractor.Extractor
-	scanTracker opTracker
+	store          *store.Store
+	scanner        *scanner.Scanner
+	extractor      *extractor.Extractor
+	scanTracker    opTracker
+	extractTracker opTracker
 }
 
 func NewWatchedDirHandler(s *store.Store, sc *scanner.Scanner, ext *extractor.Extractor) *WatchedDirHandler {
@@ -54,30 +57,15 @@ func (h *WatchedDirHandler) Create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	dir, err := h.store.CreateWatchedDir(req.Path)
+	id, err := h.store.CreateWatchedDir(req.Path)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
 
-	slog.Info("starting background scan", "dir", dir.Path, "dir_id", dir.ID)
-	h.scanTracker.clear()
-	go func() {
-		defer func() {
-			if r := recover(); r != nil {
-				slog.Error("scan panicked", "dir", dir.Path, "panic", r)
-				h.scanTracker.error(fmt.Sprintf("Scan panicked: %v", r))
-			}
-		}()
-		h.scanTracker.update("scanning", "Scanning directory", 0, 0)
-		if err := h.scanner.Scan(context.Background(), dir.Path, dir.ID); err != nil {
-			h.scanTracker.error("Scan failed: " + err.Error())
-			return
-		}
-		h.scanTracker.complete("Scan complete")
-	}()
+	go scan(h, req.Path, id)
 
-	writeJSON(w, http.StatusCreated, dir)
+	writeJSON(w, http.StatusCreated, map[string]any{"id": id})
 }
 
 func (h *WatchedDirHandler) Update(w http.ResponseWriter, r *http.Request) {
@@ -92,16 +80,16 @@ func (h *WatchedDirHandler) Update(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	dir, err := h.store.UpdateWatchedDir(id, req.Enabled)
+	id, err := h.store.UpdateWatchedDir(id, req.Enabled)
 	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			writeError(w, http.StatusNotFound, "watched directory not found")
+			return
+		}
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
-	if dir == nil {
-		writeError(w, http.StatusNotFound, "watched directory not found")
-		return
-	}
-	writeJSON(w, http.StatusOK, dir)
+	writeJSON(w, http.StatusOK, map[string]any{"id": id})
 }
 
 func (h *WatchedDirHandler) Delete(w http.ResponseWriter, r *http.Request) {
@@ -133,22 +121,7 @@ func (h *WatchedDirHandler) Scan(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	slog.Info("starting background scan", "dir", dir.Path, "dir_id", dir.ID)
-	h.scanTracker.clear()
-	go func() {
-		defer func() {
-			if r := recover(); r != nil {
-				slog.Error("scan panicked", "dir", dir.Path, "panic", r)
-				h.scanTracker.error(fmt.Sprintf("Scan panicked: %v", r))
-			}
-		}()
-		h.scanTracker.update("scanning", "Scanning directory", 0, 0)
-		if err := h.scanner.Scan(context.Background(), dir.Path, dir.ID); err != nil {
-			h.scanTracker.error("Scan failed: " + err.Error())
-			return
-		}
-		h.scanTracker.complete("Scan complete")
-	}()
+	go scan(h, dir.Path, dir.ID)
 
 	writeJSON(w, http.StatusAccepted, dir)
 }
@@ -185,9 +158,32 @@ func (h *WatchedDirHandler) Extract(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if queued > 0 {
-		slog.Info("starting background extraction", "dir_id", id, "queued", queued)
-		go h.extractor.ProcessAll(context.Background(), nil)
+		go func() {
+			slog.Info("starting background extraction", "dir_id", id, "queued", queued)
+			h.extractTracker.clear()
+			h.extractor.ProcessAll(context.Background(), func(processed int) {
+				h.extractTracker.update("extracting", "Extracting files", processed, int(queued))
+			})
+			h.extractTracker.complete("Extract complete")
+		}()
 	}
 
 	writeJSON(w, http.StatusAccepted, map[string]int64{"queued": queued})
+}
+
+func scan(h *WatchedDirHandler, path string, id int64) {
+	slog.Info("starting background scan", "dir", path, "dir_id", id)
+	h.scanTracker.clear()
+	defer func() {
+		if r := recover(); r != nil {
+			slog.Error("scan panicked", "dir", path, "panic", r)
+			h.scanTracker.error(fmt.Sprintf("Scan panicked: %v", r))
+		}
+	}()
+	h.scanTracker.update("scanning", "Scanning directory", 0, 0)
+	if err := h.scanner.Scan(context.Background(), path, id); err != nil {
+		h.scanTracker.error("Scan failed: " + err.Error())
+		return
+	}
+	h.scanTracker.complete("Scan complete")
 }

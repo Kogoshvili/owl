@@ -42,20 +42,36 @@ func (s *Store) GetWatchedDir(id int64) (*WatchedDir, error) {
 	return &d, err
 }
 
-func (s *Store) CreateWatchedDir(path string) (*WatchedDir, error) {
+func (s *Store) CreateWatchedDir(path string) (int64, error) {
 	result, err := s.db.Exec(`INSERT INTO watched_directories (path) VALUES (?)`, path)
 	if err != nil {
-		return nil, err
+		return 0, err
 	}
-	id, _ := result.LastInsertId()
-	return s.GetWatchedDir(id)
+
+	id, err := result.LastInsertId()
+	if err != nil {
+		return 0, err
+	}
+
+	return id, nil
 }
 
-func (s *Store) UpdateWatchedDir(id int64, enabled *bool) (*WatchedDir, error) {
+func (s *Store) UpdateWatchedDir(id int64, enabled *bool) (int64, error) {
 	if enabled != nil {
-		s.db.Exec(`UPDATE watched_directories SET enabled = ? WHERE id = ?`, *enabled, id)
+		res, err := s.db.Exec(`UPDATE watched_directories SET enabled = ? WHERE id = ?`, *enabled, id)
+		if err != nil {
+			return 0, err
+		}
+		n, err := res.RowsAffected()
+		if err != nil {
+			return 0, err
+		}
+		if n == 0 {
+			return 0, sql.ErrNoRows
+		}
 	}
-	return s.GetWatchedDir(id)
+
+	return id, nil
 }
 
 func (s *Store) DeleteWatchedDirAndFiles(id int64) error {

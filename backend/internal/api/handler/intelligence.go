@@ -891,9 +891,7 @@ func (h *IntelligenceHandler) ExtractOrphans(w http.ResponseWriter, r *http.Requ
 
 		if queued > 0 && h.extractor != nil {
 			h.extractTracker.update("extracting", "Extracting files", 0, queued)
-			processed := 0
-			h.extractor.ProcessAll(context.Background(), func(_, _ int) {
-				processed++
+			h.extractor.ProcessAll(context.Background(), func(processed int) {
 				h.extractTracker.update("extracting", "Extracting files", processed, queued)
 			})
 		}

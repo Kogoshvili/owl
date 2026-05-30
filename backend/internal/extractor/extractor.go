@@ -26,7 +26,7 @@ func New(s *store.Store) *Extractor {
 }
 
 var supportedExtensions = map[string]bool{
-	".txt":  true, ".md": true, ".log": true,
+	".txt": true, ".md": true, ".log": true,
 	".csv": true, ".json": true, ".xml": true,
 	".yaml": true, ".yml": true, ".toml": true,
 	".ini": true, ".cfg": true, ".conf": true,
@@ -38,7 +38,7 @@ var supportedExtensions = map[string]bool{
 	".env": true, ".gitignore": true,
 	".html": true, ".htm": true, ".svg": true,
 	".css": true, ".scss": true,
-	".pdf": true,
+	".pdf":  true,
 	".docx": true, ".xlsx": true, ".pptx": true,
 }
 
@@ -46,7 +46,7 @@ func IsSupported(ext string) bool {
 	return supportedExtensions[strings.ToLower(ext)]
 }
 
-type ProgressFn func(processed, total int)
+type ProgressFn func(processed int)
 
 func (e *Extractor) ProcessAll(ctx context.Context, progress ProgressFn) error {
 	start := time.Now()
@@ -67,7 +67,7 @@ func (e *Extractor) ProcessAll(ctx context.Context, progress ProgressFn) error {
 		}
 		processed++
 		if progress != nil {
-			progress(processed, 0)
+			progress(processed)
 		}
 		if processed%100 == 0 {
 			slog.Info("extractor: progress", "processed", processed)
