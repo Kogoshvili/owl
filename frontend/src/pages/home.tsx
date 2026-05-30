@@ -1,12 +1,20 @@
 import { useState, useEffect, useRef } from "preact/hooks"
 import { desktopDir } from "@tauri-apps/api/path"
 import { useQueryClient } from "@tanstack/preact-query"
-import { useWatchedDirs, useAddWatchedDir, useScanDir, useDeleteDir, useRunGuard, useExtractOrphans, useProcessingStats, useGuardStatus, useGenStatus, useScanStatus, useExtractStatus, useLlmStatus, useFolderSuggestions, useGenerateSuggestions, useDismissSuggestion, useRefineAllSuggestions, useAcceptSuggestion } from "../hooks/queries"
+import { useWatchedDirs, useAddWatchedDir, useScanDir, useDeleteDir, useRunGuard, useExtractOrphans, useProcessingStats, useGuardStatus, useGenStatus, useScanStatus, useExtractStatus, useLlmStatus, useLlmSetupStatus, useFolderSuggestions, useGenerateSuggestions, useDismissSuggestion, useRefineAllSuggestions, useAcceptSuggestion } from "../hooks/queries"
 import { useToast } from "../hooks/toast"
 import { FileTree } from "../components/file-tree"
 import { ProgressBar } from "../components/progress-bar"
 import { route } from "preact-router"
 import type { FolderSuggestionDisplay, RunningStatus } from "../api"
+import { startLlmSetup } from "../api"
+
+function formatBytes(n: number): string {
+  if (n < 1024) return n + " B"
+  if (n < 1024 * 1024) return (n / 1024).toFixed(1) + " KB"
+  if (n < 1024 * 1024 * 1024) return (n / (1024 * 1024)).toFixed(1) + " MB"
+  return (n / (1024 * 1024 * 1024)).toFixed(1) + " GB"
+}
 
 function AcceptModal({ suggestion, onAccept, onClose }: {
   suggestion: FolderSuggestionDisplay
@@ -119,6 +127,7 @@ export function HomePage() {
   const orphansMutation = useExtractOrphans()
   const statsQuery = useProcessingStats()
   const llmQuery = useLlmStatus()
+  const llmSetupStatusQ = useLlmSetupStatus()
   const suggestionsQuery = useFolderSuggestions()
   const generateMutation = useGenerateSuggestions()
   const dismissMutation = useDismissSuggestion()
@@ -200,6 +209,23 @@ export function HomePage() {
     }
   }
 
+  const handleSetupAi = async () => {
+    try {
+      await startLlmSetup()
+    } catch (e: any) {
+      toast.show({ type: "error", message: e.message })
+    }
+  }
+
+  const setupStatus = llmSetupStatusQ.data
+  const prevSetupState = useRef<string | undefined>()
+  useEffect(() => {
+    if (prevSetupState.current === "pulling_model" && setupStatus?.state === "ready") {
+      qc.invalidateQueries({ queryKey: ["llmStatus"] })
+    }
+    prevSetupState.current = setupStatus?.state
+  }, [setupStatus?.state, qc])
+
   const handleDismiss = async (id: number) => {
     try {
       await dismissMutation.mutateAsync(id)
@@ -250,8 +276,20 @@ export function HomePage() {
 
       {!llmAvailable && (
         <div class="llm-banner">
-          LLM not available. Auto Folder Guard, refinement, and embeddings strategy are disabled.
-          {llmQuery.isLoading && " Checking…"}
+          {!setupStatus || setupStatus.state === "not_started" ? (
+            <>
+              LLM not available. Auto Folder Guard, refinement, and embeddings strategy are disabled.
+              <button class="btn btn-sm" style="margin-left:8px" onClick={handleSetupAi}>Setup AI</button>
+            </>
+          ) : setupStatus.state === "downloading" ? (
+            <>Downloading Ollama engine{setupStatus.total ? ` (${formatBytes(setupStatus.progress ?? 0)} / ${formatBytes(setupStatus.total)})` : "…"}</>
+          ) : setupStatus.state === "starting" ? (
+            <>Starting Ollama engine…</>
+          ) : setupStatus.state === "pulling_model" ? (
+            <>Downloading AI model{setupStatus.total ? ` (${formatBytes(setupStatus.progress ?? 0)} / ${formatBytes(setupStatus.total)})` : "…"}</>
+          ) : setupStatus.state === "error" ? (
+            <>Setup failed: {setupStatus.message}</>
+          ) : null}
         </div>
       )}
 

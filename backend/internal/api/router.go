@@ -8,18 +8,19 @@ import (
 	"owl/internal/config"
 	"owl/internal/extractor"
 	"owl/internal/llm"
+	"owl/internal/ollama"
 	"owl/internal/scanner"
 	"owl/internal/store"
 )
 
-func NewRouter(s *store.Store, sc *scanner.Scanner, ext *extractor.Extractor, llmClient *llm.Client, cfg *config.Config) http.Handler {
+func NewRouter(s *store.Store, sc *scanner.Scanner, ext *extractor.Extractor, llmClient *llm.Client, cfg *config.Config, ollamaMgr *ollama.Manager) http.Handler {
 	apiMux := http.NewServeMux()
 
 	wdh := handler.NewWatchedDirHandler(s, sc, ext)
 	fh := handler.NewFileHandler(s, ext)
 	ch := handler.NewCommentHandler(s)
 	shh := handler.NewSuggestionHandler(s)
-	ih := handler.NewIntelligenceHandler(s, llmClient, ext, cfg)
+	ih := handler.NewIntelligenceHandler(s, llmClient, ext, cfg, ollamaMgr)
 
 	apiMux.HandleFunc("GET /watched-directories", wdh.List)
 	apiMux.HandleFunc("POST /watched-directories", wdh.Create)
@@ -64,6 +65,8 @@ func NewRouter(s *store.Store, sc *scanner.Scanner, ext *extractor.Extractor, ll
 	apiMux.HandleFunc("POST /intelligence/guard/run", ih.RunGuard)
 	apiMux.HandleFunc("GET /intelligence/guard/status", ih.GetGuardStatus)
 	apiMux.HandleFunc("GET /intelligence/llm/status", ih.GetLlmStatus)
+	apiMux.HandleFunc("POST /intelligence/llm/setup", ih.StartLlmSetup)
+	apiMux.HandleFunc("GET /intelligence/llm/setup-status", ih.GetLlmSetupStatus)
 	apiMux.HandleFunc("GET /intelligence/scan/status", wdh.GetScanStatus)
 	apiMux.HandleFunc("GET /intelligence/extract/status", ih.GetExtractStatus)
 	apiMux.HandleFunc("POST /intelligence/files/extract-orphans", ih.ExtractOrphans)

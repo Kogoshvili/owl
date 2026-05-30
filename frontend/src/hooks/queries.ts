@@ -29,6 +29,7 @@ import {
   extractOrphans,
   getGuardStatus,
   getLlmStatus,
+  getLlmSetupStatus,
   getScanStatus,
   getExtractStatus,
   getGenerationStatus,
@@ -344,6 +345,14 @@ export function useLlmStatus() {
     queryKey: ["llmStatus"],
     queryFn: getLlmStatus,
     refetchInterval: 30000,
+  })
+}
+
+export function useLlmSetupStatus() {
+  return useQuery({
+    queryKey: ["llmSetupStatus"],
+    queryFn: getLlmSetupStatus,
+    refetchInterval: 2000,
   })
 }
 

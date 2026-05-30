@@ -6,17 +6,19 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
-	"owl/internal/config"
-	"owl/internal/embedding"
-	"owl/internal/extractor"
-	"owl/internal/intelligence"
-	"owl/internal/llm"
-	"owl/internal/store"
 	"path/filepath"
 	"sort"
 	"strconv"
 	"strings"
 	"time"
+
+	"owl/internal/config"
+	"owl/internal/embedding"
+	"owl/internal/extractor"
+	"owl/internal/intelligence"
+	"owl/internal/llm"
+	"owl/internal/ollama"
+	"owl/internal/store"
 )
 
 type IntelligenceHandler struct {
@@ -31,9 +33,11 @@ type IntelligenceHandler struct {
 	guardTracker   opTracker
 	extractTracker opTracker
 	maxGuardDepth  int
+	ollamaMgr      *ollama.Manager
+	llmCfg         llm.ClientConfig
 }
 
-func NewIntelligenceHandler(s *store.Store, llmClient *llm.Client, ext *extractor.Extractor, cfg *config.Config) *IntelligenceHandler {
+func NewIntelligenceHandler(s *store.Store, llmClient *llm.Client, ext *extractor.Extractor, cfg *config.Config, ollamaMgr *ollama.Manager) *IntelligenceHandler {
 	analyzer := intelligence.NewAnalyzer(s.Db())
 	registry := intelligence.NewRegistry()
 
@@ -58,6 +62,8 @@ func NewIntelligenceHandler(s *store.Store, llmClient *llm.Client, ext *extracto
 		registry:       registry,
 		folderStrategy: folderStrategy,
 		maxGuardDepth:  3,
+		ollamaMgr:      ollamaMgr,
+		llmCfg:         llm.ConfigFromEnv(cfg),
 	}
 }
 
@@ -718,6 +724,7 @@ func (h *IntelligenceHandler) GetGenerationStatus(w http.ResponseWriter, r *http
 }
 
 func (h *IntelligenceHandler) RunGuard(w http.ResponseWriter, r *http.Request) {
+	h.ensureLlmClient()
 	slog.Info("request method=POST path=/intelligence/guard/run")
 
 	h.guardTracker.clear()
@@ -779,10 +786,29 @@ func (h *IntelligenceHandler) GetExtractStatus(w http.ResponseWriter, r *http.Re
 	writeJSON(w, http.StatusOK, status)
 }
 
+func (h *IntelligenceHandler) ensureLlmClient() {
+	if h.llm != nil || h.ollamaMgr == nil {
+		return
+	}
+	st := h.ollamaMgr.Status()
+	if st.State == ollama.StateReady {
+		h.llm = llm.NewClient(h.llmCfg)
+	}
+}
+
 func (h *IntelligenceHandler) GetLlmStatus(w http.ResponseWriter, r *http.Request) {
+	h.ensureLlmClient()
+
 	llmAvailable := false
 	if h.llm != nil {
 		llmAvailable = h.llm.IsAvailable(r.Context())
+	}
+
+	if !llmAvailable && h.ollamaMgr != nil {
+		st := h.ollamaMgr.Status()
+		if st.State == ollama.StateReady {
+			llmAvailable = true
+		}
 	}
 
 	strategies := h.registry.List()
@@ -798,6 +824,37 @@ func (h *IntelligenceHandler) GetLlmStatus(w http.ResponseWriter, r *http.Reques
 		"llm_available":      llmAvailable,
 		"embedding_available": embeddingAvailable,
 	})
+}
+
+func (h *IntelligenceHandler) StartLlmSetup(w http.ResponseWriter, r *http.Request) {
+	slog.Info("request method=POST path=/intelligence/llm/setup")
+
+	if h.ollamaMgr == nil {
+		writeError(w, http.StatusBadRequest, "Ollama manager not available")
+		return
+	}
+
+	status := h.ollamaMgr.Status()
+	if status.State == ollama.StateReady {
+		writeJSON(w, http.StatusOK, map[string]any{"status": "already_ready"})
+		return
+	}
+	if status.State == ollama.StateDownloading || status.State == ollama.StateStarting || status.State == ollama.StatePullingModel {
+		writeJSON(w, http.StatusOK, map[string]any{"status": "already_running"})
+		return
+	}
+
+	go h.ollamaMgr.RunSetup(context.Background())
+
+	writeJSON(w, http.StatusAccepted, map[string]any{"status": "setup_started"})
+}
+
+func (h *IntelligenceHandler) GetLlmSetupStatus(w http.ResponseWriter, r *http.Request) {
+	if h.ollamaMgr == nil {
+		writeJSON(w, http.StatusOK, map[string]any{"state": "not_started", "message": "Not available"})
+		return
+	}
+	writeJSON(w, http.StatusOK, h.ollamaMgr.Status())
 }
 
 func (h *IntelligenceHandler) ExtractOrphans(w http.ResponseWriter, r *http.Request) {
@@ -910,6 +967,7 @@ func (h *IntelligenceHandler) RefineFolder(w http.ResponseWriter, r *http.Reques
 
 	slog.Info("request method=POST path=/intelligence/refine/folder", "id", id)
 
+	h.ensureLlmClient()
 	if h.llm == nil {
 		writeError(w, http.StatusServiceUnavailable, "LLM not configured")
 		return
@@ -992,6 +1050,7 @@ func (h *IntelligenceHandler) RefineFolder(w http.ResponseWriter, r *http.Reques
 func (h *IntelligenceHandler) RefineAllSuggestions(w http.ResponseWriter, r *http.Request) {
 	slog.Info("request method=POST path=/intelligence/folders/suggestions/refine-all")
 
+	h.ensureLlmClient()
 	if h.llm == nil {
 		writeError(w, http.StatusServiceUnavailable, "LLM not configured")
 		return

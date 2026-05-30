@@ -305,6 +305,21 @@ export function getLlmStatus(): Promise<{llm_available: boolean; embedding_avail
   return request<{llm_available: boolean; embedding_available: boolean}>("/intelligence/llm/status")
 }
 
+export interface LlmSetupStatus {
+  state: "not_started" | "downloading" | "starting" | "pulling_model" | "ready" | "error"
+  message: string
+  progress?: number
+  total?: number
+}
+
+export function startLlmSetup(): Promise<{status: string}> {
+  return request<{status: string}>("/intelligence/llm/setup", { method: "POST" })
+}
+
+export function getLlmSetupStatus(): Promise<LlmSetupStatus> {
+  return request<LlmSetupStatus>("/intelligence/llm/setup-status")
+}
+
 export function extractOrphans(): Promise<{status: string}> {
   return request<{status: string}>("/intelligence/files/extract-orphans", { method: "POST" })
 }
