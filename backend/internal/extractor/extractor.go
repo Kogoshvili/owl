@@ -46,7 +46,9 @@ func IsSupported(ext string) bool {
 	return supportedExtensions[strings.ToLower(ext)]
 }
 
-func (e *Extractor) ProcessAll(ctx context.Context) error {
+type ProgressFn func(processed, total int)
+
+func (e *Extractor) ProcessAll(ctx context.Context, progress ProgressFn) error {
 	start := time.Now()
 	processed := 0
 	slog.Info("extractor: starting ProcessAll")
@@ -64,6 +66,9 @@ func (e *Extractor) ProcessAll(ctx context.Context) error {
 			return nil
 		}
 		processed++
+		if progress != nil {
+			progress(processed, 0)
+		}
 		if processed%100 == 0 {
 			slog.Info("extractor: progress", "processed", processed)
 		}

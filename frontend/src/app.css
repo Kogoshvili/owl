@@ -947,12 +947,15 @@ tbody tr:hover {
   opacity: 0.7;
 }
 
-/* Generation Progress */
-.generation-progress {
-  margin-top: 12px;
+/* Operation Progress */
+.operation-progress {
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 6px 10px;
   display: flex;
   align-items: center;
   gap: 8px;
+  margin-top: 8px;
 }
 
 .progress-bar {
@@ -963,10 +966,21 @@ tbody tr:hover {
   overflow: hidden;
 }
 
+.progress-bar.indeterminate .progress-fill {
+  width: 25%;
+  animation: progress-indeterminate 1.5s infinite ease-in-out;
+}
+
+@keyframes progress-indeterminate {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(400%); }
+}
+
 .progress-fill {
   height: 100%;
   background: var(--accent);
   transition: width 0.3s ease;
+  border-radius: 2px;
 }
 
 .progress-text {

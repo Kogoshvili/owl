@@ -16,43 +16,21 @@ import (
 	"sort"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 )
 
 type IntelligenceHandler struct {
-	store            *store.Store
-	analyzer         *intelligence.Analyzer
-	suggester        *intelligence.Suggester
-	llm              *llm.Client
-	extractor        *extractor.Extractor
-	registry         *intelligence.Registry
-	folderStrategy   intelligence.StrategyID
-	generationMu     sync.Mutex
-	generationStatus *generationStatus
-	guardMu          sync.Mutex
-	guardStatus      *operationStatus
-	maxGuardDepth    int
-}
-
-type generationStatus struct {
-	Stage        string `json:"stage"`
-	Message      string `json:"message"`
-	Progress     int    `json:"progress"`
-	Total        int    `json:"total"`
-	StartedAt    string `json:"started_at"`
-	CompletedAt  string `json:"completed_at,omitempty"`
-}
-
-type operationStatus struct {
-	Running     bool   `json:"running"`
-	Stage       string `json:"stage,omitempty"`
-	Progress    int    `json:"progress,omitempty"`
-	Total       int    `json:"total,omitempty"`
-	Message     string `json:"message,omitempty"`
-	StartedAt   string `json:"started_at,omitempty"`
-	CompletedAt string `json:"completed_at,omitempty"`
-	Error       string `json:"error,omitempty"`
+	store          *store.Store
+	analyzer       *intelligence.Analyzer
+	suggester      *intelligence.Suggester
+	llm            *llm.Client
+	extractor      *extractor.Extractor
+	registry       *intelligence.Registry
+	folderStrategy intelligence.StrategyID
+	genTracker     opTracker
+	guardTracker   opTracker
+	extractTracker opTracker
+	maxGuardDepth  int
 }
 
 func NewIntelligenceHandler(s *store.Store, llmClient *llm.Client, ext *extractor.Extractor, cfg *config.Config) *IntelligenceHandler {
@@ -72,15 +50,14 @@ func NewIntelligenceHandler(s *store.Store, llmClient *llm.Client, ext *extracto
 	folderStrategy := intelligence.ParseStrategyID(cfg.LLM.FolderStrategy)
 
 	return &IntelligenceHandler{
-		store:            s,
-		analyzer:         analyzer,
-		suggester:        suggester,
-		llm:              llmClient,
-		extractor:        ext,
-		registry:         registry,
-		folderStrategy:   folderStrategy,
-		generationStatus: nil,
-		maxGuardDepth:    3,
+		store:          s,
+		analyzer:       analyzer,
+		suggester:      suggester,
+		llm:            llmClient,
+		extractor:      ext,
+		registry:       registry,
+		folderStrategy: folderStrategy,
+		maxGuardDepth:  3,
 	}
 }
 
@@ -220,7 +197,7 @@ func (h *IntelligenceHandler) GenerateSuggestions(w http.ResponseWriter, r *http
 
 	slog.Info("generating folder suggestions (async)", "min_files", minFiles, "min_similarity", minSimilarity, "strategy", strategyID)
 
-	h.clearGenerationStatus()
+	h.genTracker.clear()
 	go h.generateSuggestionsAsync(context.Background(), minFiles, minSimilarity, strategyID)
 
 	writeJSON(w, http.StatusAccepted, map[string]any{"status": "generating", "message": "Suggestions are being generated in the background. Poll GET /intelligence/folders/suggestions for progress."})
@@ -229,11 +206,11 @@ func (h *IntelligenceHandler) GenerateSuggestions(w http.ResponseWriter, r *http
 func (h *IntelligenceHandler) generateSuggestionsAsync(ctx context.Context, minFiles int, minSimilarity float64, strategyID intelligence.StrategyID) {
 	slog.Info("async generation started", "min_files", minFiles, "min_similarity", minSimilarity, "strategy", strategyID)
 	start := time.Now()
-	h.updateGenerationStatus("initializing", "Clearing old suggestions", 0, 1)
+	h.genTracker.update("initializing", "Clearing old suggestions", 0, 1)
 
 	if err := h.store.DeleteAllSuggestions(); err != nil {
 		slog.Error("failed to clear old suggestions", "error", err)
-		h.updateGenerationStatus("error", "Failed to clear old suggestions", 0, 1)
+		h.genTracker.error("Failed to clear old suggestions")
 		return
 	}
 	slog.Info("cleared old auto suggestions")
@@ -241,12 +218,12 @@ func (h *IntelligenceHandler) generateSuggestionsAsync(ctx context.Context, minF
 	trees, err := h.store.ListPhysicalFoldersAll()
 	if err != nil {
 		slog.Error("failed to list all physical folders", "error", err)
-		h.updateGenerationStatus("error", "Failed to list physical folders", 0, 1)
+		h.genTracker.error("Failed to list physical folders")
 		return
 	}
 	if len(trees) == 0 {
 		slog.Info("no physical folders found")
-		h.updateGenerationStatus("complete", "No physical folders found", 1, 1)
+		h.genTracker.complete("No physical folders found")
 		return
 	}
 
@@ -255,17 +232,17 @@ func (h *IntelligenceHandler) generateSuggestionsAsync(ctx context.Context, minF
 		h.collectFileIDs(tree, folderToFileIDs)
 	}
 
-	h.updateGenerationStatus("classifying_folders", "Classifying folders with LLM guard", 0, len(folderToFileIDs))
+	h.genTracker.update("classifying_folders", "Classifying folders with LLM guard", 0, len(folderToFileIDs))
 	slog.Info("classifying folders with LLM guard", "folders", len(folderToFileIDs))
 	guardedPaths, err := h.classifyFoldersWithGuard(ctx, folderToFileIDs, trees)
 	if err != nil {
 		slog.Error("failed to classify folders with guard", "error", err)
-		h.updateGenerationStatus("error", "Failed to classify folders", 0, 1)
+		h.genTracker.error("Failed to classify folders")
 		return
 	}
 	slog.Info("folder guard classification complete", "guarded_count", len(guardedPaths))
 
-	h.updateGenerationStatus("filtering_folders", "Filtering out guarded folders", 0, len(folderToFileIDs))
+	h.genTracker.update("filtering_folders", "Filtering out guarded folders", 0, len(folderToFileIDs))
 	slog.Info("filtering out guarded folders", "folder_count", len(folderToFileIDs), "guarded_paths", len(guardedPaths))
 	filteredCount := 0
 	for path := range folderToFileIDs {
@@ -291,17 +268,17 @@ func (h *IntelligenceHandler) generateSuggestionsAsync(ctx context.Context, minF
 
 	if len(allFileIDs) < minFiles {
 		slog.Info("not enough processed files across unguarded folders", "count", len(allFileIDs), "min_required", minFiles)
-		h.updateGenerationStatus("complete", "Not enough processed files", 1, 1)
+		h.genTracker.complete("Not enough processed files")
 		return
 	}
 
-	h.updateGenerationStatus("building_corpus", "Building global corpus", 0, 1)
+	h.genTracker.update("building_corpus", "Building global corpus", 0, 1)
 	slog.Info("building global corpus")
 	corpusStart := time.Now()
 	globalCorpus, err := h.analyzer.BuildCorpus(allFileIDs)
 	if err != nil {
 		slog.Error("failed to build global corpus", "error", err)
-		h.updateGenerationStatus("error", "Failed to build global corpus", 0, 1)
+		h.genTracker.error("Failed to build global corpus")
 		return
 	}
 	slog.Info("global corpus built", "elapsed", time.Since(corpusStart).String(), "unique_terms", len(globalCorpus.Keywords))
@@ -309,14 +286,14 @@ func (h *IntelligenceHandler) generateSuggestionsAsync(ctx context.Context, minF
 	fileNames, err := h.store.GetFileNames(allFileIDs)
 	if err != nil {
 		slog.Error("failed to get file names", "error", err)
-		h.updateGenerationStatus("error", "Failed to get file names", 0, 1)
+		h.genTracker.error("Failed to get file names")
 		return
 	}
 
 	var orphans []int64
 	var coherentFolders []string
 
-	h.updateGenerationStatus("analyzing_coherence", "Analyzing folder coherence", 0, len(folderToFileIDs))
+	h.genTracker.update("analyzing_coherence", "Analyzing folder coherence", 0, len(folderToFileIDs))
 	slog.Info("analyzing coherence for all unguarded folders")
 	coh := h.analyzeCoherenceForAllFolders(globalCorpus, fileNames, folderToFileIDs)
 
@@ -337,7 +314,7 @@ func (h *IntelligenceHandler) generateSuggestionsAsync(ctx context.Context, minF
 		}
 		analyzed++
 		if analyzed%10 == 0 {
-			h.updateGenerationStatus("analyzing_coherence", "Analyzing folder coherence", analyzed, len(folderToFileIDs))
+			h.genTracker.update("analyzing_coherence", "Analyzing folder coherence", analyzed, len(folderToFileIDs))
 		}
 	}
 
@@ -361,11 +338,11 @@ func (h *IntelligenceHandler) generateSuggestionsAsync(ctx context.Context, minF
 
 	if len(orphans) < minFiles {
 		slog.Info("not enough orphan files", "orphans", len(orphans), "min_required", minFiles)
-		h.updateGenerationStatus("complete", "Not enough orphan files", 1, 1)
+		h.genTracker.complete("Not enough orphan files")
 		return
 	}
 
-	h.updateGenerationStatus("clustering", "Running strategy clustering", 0, 1)
+	h.genTracker.update("clustering", "Running strategy clustering", 0, 1)
 	strategy := h.registry.Get(strategyID)
 	if strategy == nil {
 		strategy = h.registry.Default()
@@ -375,11 +352,11 @@ func (h *IntelligenceHandler) generateSuggestionsAsync(ctx context.Context, minF
 	folderSugs, err := strategy.SuggestFoldersWithCorpus(ctx, orphans, globalCorpus)
 	if err != nil {
 		slog.Error("strategy failed", "error", err)
-		h.updateGenerationStatus("error", "Strategy failed", 0, 1)
+		h.genTracker.error("Strategy failed")
 		return
 	}
 
-	h.updateGenerationStatus("saving", "Saving suggestions to DB", 0, len(folderSugs))
+	h.genTracker.update("saving", "Saving suggestions to DB", 0, len(folderSugs))
 	slog.Info("saving suggestions to DB", "suggestions", len(folderSugs))
 	saved := 0
 	for _, fs := range folderSugs {
@@ -401,11 +378,11 @@ func (h *IntelligenceHandler) generateSuggestionsAsync(ctx context.Context, minF
 
 		saved++
 		slog.Debug("saved suggestion", "id", suggestion.ID, "name", fs.Name, "files", len(fs.FileIDs))
-		h.updateGenerationStatus("saving", "Saving suggestions to DB", saved, len(folderSugs))
+		h.genTracker.update("saving", "Saving suggestions to DB", saved, len(folderSugs))
 	}
 
 	slog.Info("generation complete", "saved", saved, "elapsed", time.Since(start).String())
-	h.updateGenerationStatus("complete", fmt.Sprintf("Complete: %d suggestions generated", saved), 1, 1)
+	h.genTracker.complete(fmt.Sprintf("Complete: %d suggestions generated", saved))
 }
 
 func (h *IntelligenceHandler) collectFileIDs(f *store.PhysicalFolder, folderToFileIDs map[string][]int64) {
@@ -674,7 +651,7 @@ func (h *IntelligenceHandler) classifyFoldersWithGuard(ctx context.Context, fold
 		}
 
 		if classifiedCount%5 == 0 {
-			h.updateGenerationStatus("classifying_folders", "Classifying folders with LLM guard", classifiedCount, totalToProcess)
+			h.genTracker.update("classifying_folders", "Classifying folders with LLM guard", classifiedCount, totalToProcess)
 			slog.Info("folder guard progress", "classified", classifiedCount, "skipped", skippedCount)
 		}
 	}
@@ -725,70 +702,26 @@ func countFoldersInSubtree(f *store.PhysicalFolder) int {
 	return count
 }
 
-func (h *IntelligenceHandler) updateGenerationStatus(stage, message string, progress, total int) {
-	h.generationMu.Lock()
-	defer h.generationMu.Unlock()
-
-	if h.generationStatus == nil {
-		h.generationStatus = &generationStatus{
-			StartedAt: time.Now().Format(time.RFC3339),
-		}
-	}
-
-	h.generationStatus.Stage = stage
-	h.generationStatus.Message = message
-	h.generationStatus.Progress = progress
-	h.generationStatus.Total = total
-
-	if stage == "complete" || stage == "error" {
-		h.generationStatus.CompletedAt = time.Now().Format(time.RFC3339)
-	}
-}
-
-func (h *IntelligenceHandler) getGenerationStatus() *generationStatus {
-	h.generationMu.Lock()
-	defer h.generationMu.Unlock()
-	return h.generationStatus
-}
-
-func (h *IntelligenceHandler) clearGenerationStatus() {
-	h.generationMu.Lock()
-	defer h.generationMu.Unlock()
-	h.generationStatus = nil
-}
-
 func (h *IntelligenceHandler) GetGenerationStatus(w http.ResponseWriter, r *http.Request) {
-	status := h.getGenerationStatus()
+	status := h.genTracker.get()
 	if status == nil {
-		writeJSON(w, http.StatusOK, map[string]any{"active": false})
+		writeJSON(w, http.StatusOK, map[string]any{"running": false})
 		return
 	}
-
-	result := map[string]any{
-		"active":      true,
-		"stage":       status.Stage,
-		"message":     status.Message,
-		"progress":    status.Progress,
-		"total":       status.Total,
-		"started_at":  status.StartedAt,
-	}
-	if status.CompletedAt != "" {
-		result["completed_at"] = status.CompletedAt
-	}
-	writeJSON(w, http.StatusOK, result)
+	writeJSON(w, http.StatusOK, status)
 }
 
 func (h *IntelligenceHandler) RunGuard(w http.ResponseWriter, r *http.Request) {
 	slog.Info("request method=POST path=/intelligence/guard/run")
 
-	h.clearGuardStatus()
+	h.guardTracker.clear()
 
 	go func() {
-		h.updateGuardStatus("listing", "Listing folders", 0, 1)
+		h.guardTracker.update("listing", "Listing folders", 0, 1)
 		trees, err := h.store.ListPhysicalFoldersAll()
 		if err != nil {
 			slog.Error("guard: failed to list physical folders", "error", err)
-			h.updateGuardStatusError("Failed to list physical folders: " + err.Error())
+			h.guardTracker.error("Failed to list physical folders: " + err.Error())
 			return
 		}
 
@@ -797,19 +730,19 @@ func (h *IntelligenceHandler) RunGuard(w http.ResponseWriter, r *http.Request) {
 			h.collectFileIDs(tree, folderToFileIDs)
 		}
 
-		h.updateGuardStatus("classifying", "Classifying folders with LLM", 0, len(folderToFileIDs))
+		h.guardTracker.update("classifying", "Classifying folders with LLM", 0, len(folderToFileIDs))
 
 		guardMap, err := h.classifyFoldersWithGuard(context.Background(), folderToFileIDs, trees)
 		if err != nil {
 			slog.Error("guard: classification failed", "error", err)
-			h.updateGuardStatusError("Failed to classify folders: " + err.Error())
+			h.guardTracker.error("Failed to classify folders: " + err.Error())
 			return
 		}
 
-		h.updateGuardStatus("escalating", "Escalating guards", 0, 1)
+		h.guardTracker.update("escalating", "Escalating guards", 0, 1)
 		h.escalateGuards(trees, guardMap)
 
-		h.updateGuardStatusCompleted("Guard complete")
+		h.guardTracker.complete("Guard complete")
 		slog.Info("guard: complete")
 	}()
 
@@ -817,14 +750,21 @@ func (h *IntelligenceHandler) RunGuard(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *IntelligenceHandler) GetGuardStatus(w http.ResponseWriter, r *http.Request) {
-	h.guardMu.Lock()
-	defer h.guardMu.Unlock()
-
-	if h.guardStatus == nil || !h.guardStatus.Running && h.guardStatus.CompletedAt == "" {
+	status := h.guardTracker.get()
+	if status == nil {
 		writeJSON(w, http.StatusOK, map[string]any{"running": false})
 		return
 	}
-	writeJSON(w, http.StatusOK, h.guardStatus)
+	writeJSON(w, http.StatusOK, status)
+}
+
+func (h *IntelligenceHandler) GetExtractStatus(w http.ResponseWriter, r *http.Request) {
+	status := h.extractTracker.get()
+	if status == nil {
+		writeJSON(w, http.StatusOK, map[string]any{"running": false})
+		return
+	}
+	writeJSON(w, http.StatusOK, status)
 }
 
 func (h *IntelligenceHandler) GetLlmStatus(w http.ResponseWriter, r *http.Request) {
@@ -848,48 +788,6 @@ func (h *IntelligenceHandler) GetLlmStatus(w http.ResponseWriter, r *http.Reques
 	})
 }
 
-func (h *IntelligenceHandler) updateGuardStatus(stage string, message string, progress, total int) {
-	h.guardMu.Lock()
-	defer h.guardMu.Unlock()
-	now := time.Now().Format(time.RFC3339)
-	if h.guardStatus == nil {
-		h.guardStatus = &operationStatus{Running: true, StartedAt: now}
-	}
-	h.guardStatus.Running = true
-	h.guardStatus.Stage = stage
-	h.guardStatus.Message = message
-	h.guardStatus.Progress = progress
-	h.guardStatus.Total = total
-}
-
-func (h *IntelligenceHandler) updateGuardStatusError(msg string) {
-	h.guardMu.Lock()
-	defer h.guardMu.Unlock()
-	if h.guardStatus == nil {
-		h.guardStatus = &operationStatus{StartedAt: time.Now().Format(time.RFC3339)}
-	}
-	h.guardStatus.Running = false
-	h.guardStatus.Error = msg
-	h.guardStatus.CompletedAt = time.Now().Format(time.RFC3339)
-}
-
-func (h *IntelligenceHandler) updateGuardStatusCompleted(msg string) {
-	h.guardMu.Lock()
-	defer h.guardMu.Unlock()
-	if h.guardStatus == nil {
-		h.guardStatus = &operationStatus{StartedAt: time.Now().Format(time.RFC3339)}
-	}
-	h.guardStatus.Running = false
-	h.guardStatus.Message = msg
-	h.guardStatus.CompletedAt = time.Now().Format(time.RFC3339)
-}
-
-func (h *IntelligenceHandler) clearGuardStatus() {
-	h.guardMu.Lock()
-	defer h.guardMu.Unlock()
-	h.guardStatus = nil
-}
-
 func (h *IntelligenceHandler) ExtractOrphans(w http.ResponseWriter, r *http.Request) {
 	slog.Info("request method=POST path=/intelligence/files/extract-orphans")
 
@@ -899,22 +797,34 @@ func (h *IntelligenceHandler) ExtractOrphans(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
+	h.extractTracker.clear()
+
 	go func() {
+		h.extractTracker.update("listing", "Listing folders", 0, 1)
 		trees, err := h.store.ListPhysicalFoldersAll()
 		if err != nil {
 			slog.Error("extract orphans: failed to list physical folders", "error", err)
+			h.extractTracker.error("Failed to list physical folders: " + err.Error())
 			return
 		}
 
+		h.extractTracker.update("queuing", "Finding orphans", 0, 1)
 		queued := 0
 		for _, tree := range trees {
 			queued += h.extractOrphansInTree(tree, guardedPaths)
 		}
 
 		if queued > 0 && h.extractor != nil {
-			slog.Info("extract orphans: starting processing", "queued", queued)
-			h.extractor.ProcessAll(context.Background())
+			h.extractTracker.update("extracting", "Extracting files", 0, queued)
+			processed := 0
+			h.extractor.ProcessAll(context.Background(), func(_, _ int) {
+				processed++
+				h.extractTracker.update("extracting", "Extracting files", processed, queued)
+			})
 		}
+
+		h.extractTracker.complete("Extraction complete")
+		slog.Info("extract orphans: complete")
 	}()
 
 	writeJSON(w, http.StatusAccepted, map[string]any{"status": "extraction started"})

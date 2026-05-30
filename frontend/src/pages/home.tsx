@@ -1,59 +1,11 @@
 import { useState, useEffect, useRef } from "preact/hooks"
 import { desktopDir } from "@tauri-apps/api/path"
-import { useWatchedDirs, useAddWatchedDir, useScanDir, useDeleteDir, useRunGuard, useExtractOrphans, useProcessingStats, useGuardStatus, useLlmStatus, useFolderSuggestions, useGenerateSuggestions, useDismissSuggestion, useRefineSuggestion, useRefineAllSuggestions, useAcceptSuggestion } from "../hooks/queries"
+import { useWatchedDirs, useAddWatchedDir, useScanDir, useDeleteDir, useRunGuard, useExtractOrphans, useProcessingStats, useGuardStatus, useGenStatus, useScanStatus, useExtractStatus, useLlmStatus, useFolderSuggestions, useGenerateSuggestions, useDismissSuggestion, useRefineSuggestion, useRefineAllSuggestions, useAcceptSuggestion } from "../hooks/queries"
 import { useToast } from "../hooks/toast"
 import { FileTree } from "../components/file-tree"
+import { ProgressBar } from "../components/progress-bar"
 import { route } from "preact-router"
-import { getGenerationStatus } from "../api"
-import type { FolderSuggestionDisplay, MaterializeResult } from "../api"
-
-function GuardProgress({ status }: { status: { stage?: string; progress?: number; total?: number; message?: string } }) {
-  const total = status.total ?? 1
-  const pct = total > 0 ? Math.min(100, Math.round((status.progress ?? 0) / total * 100)) : 0
-  return (
-    <div class="operation-progress">
-      <div class="progress-bar">
-        <div class="progress-fill" style={{ width: `${pct}%` }} />
-      </div>
-      <span class="progress-text">{status.message || status.stage}</span>
-    </div>
-  )
-}
-
-function GenProgress() {
-  const [status, setStatus] = useState<{ stage?: string; message?: string; progress?: number; total?: number } | null>(null)
-  const intervalRef = useRef<ReturnType<typeof setInterval>>()
-
-  useEffect(() => {
-    intervalRef.current = setInterval(async () => {
-      try {
-        const s = await getGenerationStatus()
-        if (s.active) {
-          setStatus(s)
-        } else {
-          setStatus(null)
-          if (intervalRef.current) clearInterval(intervalRef.current)
-        }
-      } catch {
-        setStatus(null)
-      }
-    }, 2000)
-    return () => { if (intervalRef.current) clearInterval(intervalRef.current) }
-  }, [])
-
-  if (!status) return null
-
-  const total = status.total ?? 1
-  const pct = total > 0 ? Math.min(100, Math.round((status.progress ?? 0) / total * 100)) : 0
-  return (
-    <div class="operation-progress">
-      <div class="progress-bar">
-        <div class="progress-fill" style={{ width: `${pct}%` }} />
-      </div>
-      <span class="progress-text">{status.message || status.stage}</span>
-    </div>
-  )
-}
+import type { FolderSuggestionDisplay, RunningStatus } from "../api"
 
 function AcceptModal({ suggestion, onAccept, onClose }: {
   suggestion: FolderSuggestionDisplay
@@ -149,37 +101,46 @@ export function HomePage() {
   const refineAllMutation = useRefineAllSuggestions()
   const acceptMutation = useAcceptSuggestion()
 
-  const [guardJustStarted, setGuardJustStarted] = useState(false)
-  const guardStatusQuery = useGuardStatus(guardJustStarted)
-  const guardStatus = guardStatusQuery.data
+  const scanStatusQ = useScanStatus()
+  const extractStatusQ = useExtractStatus()
+  const guardStatusQ = useGuardStatus()
+  const genStatusQ = useGenStatus()
 
-  const [generating, setGenerating] = useState(false)
-  const [genActive, setGenActive] = useState(false)
   const [refiningId, setRefiningId] = useState<number | null>(null)
   const [acceptingId, setAcceptingId] = useState<number | null>(null)
   const [strategy, setStrategy] = useState("content_tfidf")
-
-  if (guardStatus && !guardStatus.running && guardJustStarted) {
-    setGuardJustStarted(false)
-    if (guardStatus.error) {
-      toast.show({ type: "error", message: "Guard failed: " + guardStatus.error })
-    } else {
-      toast.show({ type: "success", message: guardStatus.message || "Guard complete" })
-    }
-  }
 
   const dirs = dirsQuery.data ?? []
   const stats = statsQuery.data
   const llmAvailable = llmQuery.data?.llm_available ?? false
   const suggestions = suggestionsQuery.data ? Object.values(suggestionsQuery.data) : []
 
+  const anyRunning = !!(scanStatusQ.data?.running || extractStatusQ.data?.running || guardStatusQ.data?.running || genStatusQ.data?.running)
+
+  function useOpToast(status: RunningStatus | undefined, label: string) {
+    const prev = useRef({ running: false, completed: "" })
+    useEffect(() => {
+      if (!status) { prev.current.running = false; return }
+      if (prev.current.running && !status.running && status.completed_at && status.completed_at !== prev.current.completed) {
+        prev.current.completed = status.completed_at
+        if (status.error) {
+          toast.show({ type: "error", message: `${label} failed: ${status.error}` })
+        } else {
+          toast.show({ type: "success", message: status.message || `${label} complete` })
+        }
+      }
+      prev.current.running = status.running
+    }, [status])
+  }
+
+  useOpToast(scanStatusQ.data, "Scan")
+  useOpToast(extractStatusQ.data, "Extraction")
+  useOpToast(guardStatusQ.data, "Guard")
+  useOpToast(genStatusQ.data, "Generation")
+
   const handleGuard = () => {
-    setGuardJustStarted(true)
     guardMutation.mutate(undefined, {
-      onError: (err: Error) => {
-        setGuardJustStarted(false)
-        toast.show({ type: "error", message: err.message })
-      },
+      onError: (err: Error) => { toast.show({ type: "error", message: err.message }) },
     })
   }
 
@@ -187,42 +148,15 @@ export function HomePage() {
     orphansMutation.mutate(undefined, {
       onError: (err: Error) => { toast.show({ type: "error", message: err.message }) },
     })
-    toast.show({ type: "info", message: "Extraction started" })
   }
 
   const handleGenerate = async () => {
-    setGenerating(true)
-    setGenActive(true)
     try {
       await generateMutation.mutateAsync({ strategy })
-      toast.show({ type: "info", message: "Generating suggestions…" })
     } catch (e: any) {
       toast.show({ type: "error", message: e.message })
     }
   }
-
-  useEffect(() => {
-    if (!genActive) return
-    const interval = setInterval(async () => {
-      try {
-        const s = await getGenerationStatus()
-        if (!s.active) {
-          clearInterval(interval)
-          setGenerating(false)
-          setGenActive(false)
-          suggestionsQuery.refetch()
-          if (s.completed_at) {
-            toast.show({ type: "success", message: s.message || "Suggestions generated" })
-          }
-        }
-      } catch {
-        clearInterval(interval)
-        setGenerating(false)
-        setGenActive(false)
-      }
-    }, 2000)
-    return () => clearInterval(interval)
-  }, [genActive, suggestionsQuery])
 
   const handleDismiss = async (id: number) => {
     try {
@@ -277,18 +211,18 @@ export function HomePage() {
 
       <div class="files-pipeline-bar">
         <div class="pipeline-actions">
-          <button class="btn btn-sm" onClick={handleGuard} disabled={guardMutation.isPending || guardJustStarted || !llmAvailable} title={!llmAvailable ? "Requires LLM" : ""}>
-            {guardMutation.isPending || guardJustStarted ? "Guarding…" : "Guard Folders"}
+          <button class="btn btn-sm" onClick={handleGuard} disabled={anyRunning || !llmAvailable} title={!llmAvailable ? "Requires LLM" : ""}>
+            {guardStatusQ.data?.running ? "Guarding…" : "Guard Folders"}
           </button>
-          <button class="btn btn-sm" onClick={handleExtract} disabled={orphansMutation.isPending}>
-            {orphansMutation.isPending ? "Extracting…" : "Extract Orphans"}
+          <button class="btn btn-sm" onClick={handleExtract} disabled={anyRunning}>
+            {extractStatusQ.data?.running ? "Extracting…" : "Extract Orphans"}
           </button>
           <select class="strategy-select" value={strategy} onChange={(e) => setStrategy((e.target as HTMLSelectElement).value)}>
             <option value="content_tfidf">content_tfidf</option>
             <option value="embeddings" disabled={!llmAvailable}>embeddings{!llmAvailable ? " (requires LLM)" : ""}</option>
           </select>
-          <button class="btn btn-sm btn-primary" onClick={handleGenerate} disabled={generating}>
-            {generating ? "Generating…" : "Generate"}
+          <button class="btn btn-sm btn-primary" onClick={handleGenerate} disabled={anyRunning}>
+            {genStatusQ.data?.running ? "Generating…" : "Generate"}
           </button>
         </div>
         <div class="pipeline-status">
@@ -308,8 +242,10 @@ export function HomePage() {
         </div>
       </div>
 
-      {guardStatus?.running && <GuardProgress status={guardStatus} />}
-      {(generating || genActive) && <GenProgress />}
+      <ProgressBar running={scanStatusQ.data?.running ?? false} progress={scanStatusQ.data?.progress} total={scanStatusQ.data?.total} message={scanStatusQ.data?.message} />
+      <ProgressBar running={extractStatusQ.data?.running ?? false} progress={extractStatusQ.data?.progress} total={extractStatusQ.data?.total} message={extractStatusQ.data?.message} />
+      <ProgressBar running={guardStatusQ.data?.running ?? false} progress={guardStatusQ.data?.progress} total={guardStatusQ.data?.total} message={guardStatusQ.data?.message} />
+      <ProgressBar running={genStatusQ.data?.running ?? false} progress={genStatusQ.data?.progress} total={genStatusQ.data?.total} message={genStatusQ.data?.message} />
 
       <div class="section">
         <FileTree
@@ -317,6 +253,7 @@ export function HomePage() {
           addMutation={addMutation}
           scanMutation={scanMutation}
           deleteMutation={deleteMutation}
+          anyRunning={anyRunning}
         />
       </div>
 

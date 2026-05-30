@@ -363,37 +363,16 @@ export function getUnprocessedCount(watchedDirId?: number): Promise<{count: numb
   return request<{count: number}>("/intelligence/files/unprocessed/count")
 }
 
-export interface GenerationStatus {
-  active: boolean
-  stage?: string
-  message?: string
-  progress?: number
-  total?: number
-  started_at?: string
-  completed_at?: string
-}
-
-export function getGenerationStatus(): Promise<GenerationStatus> {
-  return request<GenerationStatus>("/intelligence/folders/suggestions/status")
+export function getGenerationStatus(): Promise<RunningStatus> {
+  return request<RunningStatus>("/intelligence/folders/suggestions/status")
 }
 
 export function runGuard(): Promise<{status: string}> {
   return request<{status: string}>("/intelligence/guard/run", { method: "POST" })
 }
 
-export interface GuardStatus {
-  running: boolean
-  stage?: string
-  progress?: number
-  total?: number
-  message?: string
-  started_at?: string
-  completed_at?: string
-  error?: string
-}
-
-export function getGuardStatus(): Promise<GuardStatus> {
-  return request<GuardStatus>("/intelligence/guard/status")
+export function getGuardStatus(): Promise<RunningStatus> {
+  return request<RunningStatus>("/intelligence/guard/status")
 }
 
 export function getLlmStatus(): Promise<{llm_available: boolean; embedding_available: boolean}> {
@@ -402,6 +381,25 @@ export function getLlmStatus(): Promise<{llm_available: boolean; embedding_avail
 
 export function extractOrphans(): Promise<{status: string}> {
   return request<{status: string}>("/intelligence/files/extract-orphans", { method: "POST" })
+}
+
+export function getScanStatus(): Promise<RunningStatus> {
+  return request<RunningStatus>("/intelligence/scan/status")
+}
+
+export function getExtractStatus(): Promise<RunningStatus> {
+  return request<RunningStatus>("/intelligence/extract/status")
+}
+
+export interface RunningStatus {
+  running: boolean
+  stage?: string
+  progress?: number
+  total?: number
+  message?: string
+  started_at?: string
+  completed_at?: string
+  error?: string
 }
 
 export interface ProcessingStats {

@@ -259,7 +259,7 @@ func (h *FileHandler) Extract(w http.ResponseWriter, r *http.Request) {
 	}
 
 	slog.Info("starting background extraction", "file_id", id)
-	go h.extractor.ProcessAll(context.Background())
+	go h.extractor.ProcessAll(context.Background(), nil)
 
 	writeJSON(w, http.StatusAccepted, map[string]string{"status": "queued"})
 }

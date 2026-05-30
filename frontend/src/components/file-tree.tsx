@@ -14,11 +14,12 @@ export interface FileTreeFilterState {
 
 const PROCESSING_STATUSES = ["unprocessed", "queued", "processing", "processed", "stale", "failed"] as const
 
-export function FileTree({ dirs, addMutation, scanMutation, deleteMutation }: {
+export function FileTree({ dirs, addMutation, scanMutation, deleteMutation, anyRunning }: {
   dirs: WatchedDir[]
   addMutation: UseMutationResult<WatchedDir, Error, string>
   scanMutation: UseMutationResult<WatchedDir, Error, number>
   deleteMutation: UseMutationResult<void, Error, number>
+  anyRunning?: boolean
 }) {
   const toast = useToast()
   const physicalFoldersQuery = usePhysicalFolders()
@@ -156,6 +157,7 @@ export function FileTree({ dirs, addMutation, scanMutation, deleteMutation }: {
                 scanMutation={scanMutation}
                 deleteMutation={deleteMutation}
                 findWatchedDir={findWatchedDir}
+                anyRunning={anyRunning}
               />
             ))}
           </div>
@@ -167,7 +169,7 @@ export function FileTree({ dirs, addMutation, scanMutation, deleteMutation }: {
   )
 }
 
-function FileTreeFolderNode({ folder, depth, filters, guardMap, onToggleGuard, onExtract, refreshKey, showFiles, scanMutation, deleteMutation, findWatchedDir }: {
+function FileTreeFolderNode({ folder, depth, filters, guardMap, onToggleGuard, onExtract, refreshKey, showFiles, scanMutation, deleteMutation, findWatchedDir, anyRunning }: {
   folder: PhysicalFolder
   depth: number
   filters: FileTreeFilterState
@@ -179,6 +181,7 @@ function FileTreeFolderNode({ folder, depth, filters, guardMap, onToggleGuard, o
   scanMutation: UseMutationResult<WatchedDir, Error, number>
   deleteMutation: UseMutationResult<void, Error, number>
   findWatchedDir: (folderPath: string) => WatchedDir | undefined
+  anyRunning?: boolean
 }) {
   const [expanded, setExpanded] = useState(false)
   const [files, setFiles] = useState<OwlFile[] | null>(null)
@@ -247,7 +250,7 @@ function FileTreeFolderNode({ folder, depth, filters, guardMap, onToggleGuard, o
         </span>
         {watched && (
           <div class="dir-card-actions">
-            <button class="btn btn-sm" disabled={scanMutation.isPending} onClick={handleScan}>
+            <button class="btn btn-sm" disabled={anyRunning || scanMutation.isPending} onClick={handleScan}>
               Rescan
             </button>
             <button class="btn btn-sm btn-danger" disabled={deleteMutation.isPending} onClick={handleDelete}>
@@ -270,11 +273,12 @@ function FileTreeFolderNode({ folder, depth, filters, guardMap, onToggleGuard, o
               onExtract={onExtract}
               refreshKey={refreshKey}
               showFiles={showFiles}
-              scanMutation={scanMutation}
-              deleteMutation={deleteMutation}
-              findWatchedDir={findWatchedDir}
-            />
-          ))}
+                scanMutation={scanMutation}
+                deleteMutation={deleteMutation}
+                findWatchedDir={findWatchedDir}
+                anyRunning={anyRunning}
+              />
+            ))}
           {showFiles && filteredFiles?.map((f) => (
             <FileTreeFileRow key={f.id} file={f} depth={depth + 1} onExtract={onExtract} />
           ))}

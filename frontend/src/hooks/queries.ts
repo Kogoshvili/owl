@@ -35,8 +35,11 @@ import {
   extractOrphans,
   getGuardStatus,
   getLlmStatus,
+  getScanStatus,
+  getExtractStatus,
+  getGenerationStatus,
 } from "../api"
-import type { FileListFilterState } from "../api"
+import type { FileListFilterState, RunningStatus } from "../api"
 
 export function useWatchedDirs() {
   return useQuery({
@@ -49,7 +52,10 @@ export function useAddWatchedDir() {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: (path: string) => addWatchedDir(path),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["watchedDirs"] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["watchedDirs"] })
+      qc.invalidateQueries({ queryKey: ["scanStatus"] })
+    },
   })
 }
 
@@ -57,7 +63,10 @@ export function useScanDir() {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: (id: number) => scanDir(id),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["watchedDirs"] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["watchedDirs"] })
+      qc.invalidateQueries({ queryKey: ["scanStatus"] })
+    },
   })
 }
 
@@ -286,6 +295,7 @@ export function useGenerateSuggestions() {
     mutationFn: (params?: Parameters<typeof generateSuggestions>[0]) =>
       generateSuggestions(params),
     onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["genStatus"] })
       qc.invalidateQueries({ queryKey: ["folderSuggestions"] })
       qc.invalidateQueries({ queryKey: ["suggestions"] })
     },
@@ -305,6 +315,7 @@ export function useRunGuard() {
   return useMutation({
     mutationFn: () => runGuard(),
     onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["guardStatus"] })
       qc.invalidateQueries({ queryKey: ["folderGuards"] })
       qc.invalidateQueries({ queryKey: ["physicalFolders"] })
       qc.invalidateQueries({ queryKey: ["processingStats"] })
@@ -317,6 +328,7 @@ export function useExtractOrphans() {
   return useMutation({
     mutationFn: () => extractOrphans(),
     onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["extractStatus"] })
       qc.invalidateQueries({ queryKey: ["unprocessedCount"] })
       qc.invalidateQueries({ queryKey: ["processingStats"] })
     },
@@ -352,13 +364,28 @@ export function useDeleteComment() {
   })
 }
 
-export function useGuardStatus(enabled: boolean) {
+function useRunningStatus(key: string, fn: () => Promise<RunningStatus>) {
   return useQuery({
-    queryKey: ["guardStatus"],
-    queryFn: getGuardStatus,
-    refetchInterval: enabled ? 2000 : false,
-    enabled,
+    queryKey: [key],
+    queryFn: fn,
+    refetchInterval: (data) => (data?.running ? 2000 : 30000),
   })
+}
+
+export function useScanStatus() {
+  return useRunningStatus("scanStatus", getScanStatus)
+}
+
+export function useExtractStatus() {
+  return useRunningStatus("extractStatus", getExtractStatus)
+}
+
+export function useGuardStatus() {
+  return useRunningStatus("guardStatus", getGuardStatus)
+}
+
+export function useGenStatus() {
+  return useRunningStatus("genStatus", getGenerationStatus)
 }
 
 export function useLlmStatus() {

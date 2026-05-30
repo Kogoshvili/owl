@@ -66,6 +66,8 @@ func NewRouter(s *store.Store, sc *scanner.Scanner, ext *extractor.Extractor, ll
 	mux.HandleFunc("POST /intelligence/guard/run", ih.RunGuard)
 	mux.HandleFunc("GET /intelligence/guard/status", ih.GetGuardStatus)
 	mux.HandleFunc("GET /intelligence/llm/status", ih.GetLlmStatus)
+	mux.HandleFunc("GET /intelligence/scan/status", wdh.GetScanStatus)
+	mux.HandleFunc("GET /intelligence/extract/status", ih.GetExtractStatus)
 	mux.HandleFunc("POST /intelligence/files/extract-orphans", ih.ExtractOrphans)
 
 	return middleware.Logging(middleware.CORS(mux))
