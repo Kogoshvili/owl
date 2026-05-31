@@ -12,8 +12,9 @@ import (
 )
 
 type FileHandler struct {
-	store     *store.Store
-	extractor *extractor.Extractor
+	store          *store.Store
+	extractor      *extractor.Extractor
+	extractTracker opTracker
 }
 
 func NewFileHandler(s *store.Store, ext *extractor.Extractor) *FileHandler {
@@ -35,6 +36,15 @@ func addProcessable(files []store.File) []fileResponse {
 		}
 	}
 	return result
+}
+
+func runExtraction(ext *extractor.Extractor, tracker *opTracker) {
+	slog.Info("starting background extraction")
+	tracker.clear()
+	ext.ProcessAll(context.Background(), func(processed int) {
+		tracker.update("extracting", "Extracting files", processed, 0)
+	})
+	tracker.complete("Extract complete")
 }
 
 func (h *FileHandler) List(w http.ResponseWriter, r *http.Request) {
@@ -219,8 +229,7 @@ func (h *FileHandler) Extract(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	slog.Info("starting background extraction", "file_id", id)
-	go h.extractor.ProcessAll(context.Background(), nil)
+	go runExtraction(h.extractor, &h.extractTracker)
 
 	writeJSON(w, http.StatusAccepted, map[string]string{"status": "queued"})
 }

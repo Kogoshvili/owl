@@ -158,14 +158,7 @@ func (h *WatchedDirHandler) Extract(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if queued > 0 {
-		go func() {
-			slog.Info("starting background extraction", "dir_id", id, "queued", queued)
-			h.extractTracker.clear()
-			h.extractor.ProcessAll(context.Background(), func(processed int) {
-				h.extractTracker.update("extracting", "Extracting files", processed, int(queued))
-			})
-			h.extractTracker.complete("Extract complete")
-		}()
+		go runExtraction(h.extractor, &h.extractTracker)
 	}
 
 	writeJSON(w, http.StatusAccepted, map[string]int64{"queued": queued})
