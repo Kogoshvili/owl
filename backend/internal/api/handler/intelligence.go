@@ -22,53 +22,54 @@ import (
 )
 
 type IntelligenceHandler struct {
-	store          *store.Store
-	analyzer       *intelligence.Analyzer
-	suggester      *intelligence.Suggester
-	llm            *llm.Client
-	extractor      *extractor.Extractor
-	registry       *intelligence.Registry
-	folderStrategy intelligence.StrategyID
-	genTracker     opTracker
-	guardTracker   opTracker
-	extractTracker opTracker
-	maxGuardDepth  int
-	ollamaMgr      *ollama.Manager
-	llmCfg         llm.ClientConfig
+	store              *store.Store
+	analyzer           *intelligence.Analyzer
+	suggester          *intelligence.Suggester
+	llm                *llm.Client
+	extractor          *extractor.Extractor
+	contentStrategy    *intelligence.ContentTFIDFStrategy
+	embeddingsStrategy *intelligence.EmbeddingsStrategy
+	folderStrategy     intelligence.StrategyID
+	genTracker         opTracker
+	guardTracker       opTracker
+	extractTracker     opTracker
+	maxGuardDepth      int
+	ollamaMgr          *ollama.Manager
+	llmCfg             llm.ClientConfig
 }
 
 func NewIntelligenceHandler(s *store.Store, ext *extractor.Extractor, cfg *config.Config, ollamaMgr *ollama.Manager) *IntelligenceHandler {
 	analyzer := intelligence.NewAnalyzer(s.Db())
-	registry := intelligence.NewRegistry()
 
-	registry.Register(intelligence.NewContentTFIDFStrategy(analyzer, s))
+	contentStrategy := intelligence.NewContentTFIDFStrategy(analyzer, s)
 
+	var embeddingsStrategy *intelligence.EmbeddingsStrategy
 	if cfg.LLM.EmbedModel != "" || cfg.LLM.FolderStrategy == "embeddings" {
 		embedURL := cfg.LLM.BaseURL
 		embedClient := embedding.NewClient(embedURL, cfg.LLM.EmbedModel)
-		registry.Register(intelligence.NewEmbeddingsStrategy(analyzer, s, embedClient))
+		embeddingsStrategy = intelligence.NewEmbeddingsStrategy(analyzer, s, embedClient)
 	}
 
-	suggester := intelligence.NewSuggester(analyzer, s, registry)
+	suggester := intelligence.NewSuggester(analyzer, s)
 
-	folderStrategy := intelligence.ParseStrategyID(cfg.LLM.FolderStrategy)
+	folderStrategy := intelligence.StrategyContentTFIDF
+	if cfg.LLM.FolderStrategy == "embeddings" {
+		folderStrategy = intelligence.StrategyEmbeddings
+	}
 
 	return &IntelligenceHandler{
-		store:          s,
-		analyzer:       analyzer,
-		suggester:      suggester,
-		llm:            nil,
-		extractor:      ext,
-		registry:       registry,
-		folderStrategy: folderStrategy,
-		maxGuardDepth:  3,
-		ollamaMgr:      ollamaMgr,
-		llmCfg:         llm.ConfigFromEnv(cfg),
+		store:              s,
+		analyzer:           analyzer,
+		suggester:          suggester,
+		llm:                nil,
+		extractor:          ext,
+		contentStrategy:    contentStrategy,
+		embeddingsStrategy: embeddingsStrategy,
+		folderStrategy:     folderStrategy,
+		maxGuardDepth:      3,
+		ollamaMgr:          ollamaMgr,
+		llmCfg:             llm.ConfigFromEnv(cfg),
 	}
-}
-
-func (h *IntelligenceHandler) ListStrategies(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, http.StatusOK, h.registry.List())
 }
 
 func (h *IntelligenceHandler) ListPhysicalFolders(w http.ResponseWriter, r *http.Request) {
@@ -355,13 +356,15 @@ func (h *IntelligenceHandler) generateSuggestionsAsync(ctx context.Context, minF
 	}
 
 	h.genTracker.update("clustering", "Running strategy clustering", 0, 0)
-	strategy := h.registry.Get(strategyID)
-	if strategy == nil {
-		strategy = h.registry.Default()
-	}
 
-	slog.Info("running strategy on orphans", "orphans", len(orphans))
-	folderSugs, err := strategy.SuggestFoldersWithCorpus(ctx, orphans, globalCorpus)
+	var folderSugs []intelligence.FolderSuggestion
+	if strategyID == intelligence.StrategyEmbeddings && h.embeddingsStrategy != nil {
+		slog.Info("running embeddings strategy on orphans", "orphans", len(orphans))
+		folderSugs, err = h.embeddingsStrategy.SuggestFoldersWithCorpus(ctx, orphans, globalCorpus)
+	} else {
+		slog.Info("running content_tfidf strategy on orphans", "orphans", len(orphans))
+		folderSugs, err = h.contentStrategy.SuggestFoldersWithCorpus(ctx, orphans, globalCorpus)
+	}
 	if err != nil {
 		slog.Error("strategy failed", "error", err)
 		h.genTracker.error("Strategy failed")
@@ -811,18 +814,9 @@ func (h *IntelligenceHandler) GetLlmStatus(w http.ResponseWriter, r *http.Reques
 		}
 	}
 
-	strategies := h.registry.List()
-	embeddingAvailable := false
-	for _, s := range strategies {
-		if s.ID == "embeddings" {
-			embeddingAvailable = s.Available
-			break
-		}
-	}
-
 	writeJSON(w, http.StatusOK, map[string]any{
 		"llm_available":       llmAvailable,
-		"embedding_available": embeddingAvailable,
+		"embedding_available": h.embeddingsStrategy != nil,
 	})
 }
 

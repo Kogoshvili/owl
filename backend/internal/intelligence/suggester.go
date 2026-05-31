@@ -14,14 +14,12 @@ const (
 type Suggester struct {
 	analyzer *Analyzer
 	store    *store.Store
-	registry *Registry
 }
 
-func NewSuggester(analyzer *Analyzer, store *store.Store, registry *Registry) *Suggester {
+func NewSuggester(analyzer *Analyzer, store *store.Store) *Suggester {
 	return &Suggester{
 		analyzer: analyzer,
 		store:    store,
-		registry: registry,
 	}
 }
 

@@ -21,18 +21,6 @@ func NewContentTFIDFStrategy(analyzer *Analyzer, store *store.Store) *ContentTFI
 	}
 }
 
-func (s *ContentTFIDFStrategy) ID() StrategyID      { return StrategyContentTFIDF }
-func (s *ContentTFIDFStrategy) DisplayName() string { return "Content TF-IDF" }
-func (s *ContentTFIDFStrategy) Description() string {
-	return "Tags and folders from TF-IDF analysis of extracted file content. Much richer signal than path-based analysis."
-}
-func (s *ContentTFIDFStrategy) Available() bool   { return true }
-func (s *ContentTFIDFStrategy) SpeedHint() string { return "~30s for 12K files" }
-
-func (s *ContentTFIDFStrategy) SuggestFolders(ctx context.Context, fileIDs []int64) ([]FolderSuggestion, error) {
-	return s.SuggestFoldersWithCorpus(ctx, fileIDs, nil)
-}
-
 func (s *ContentTFIDFStrategy) SuggestFoldersWithCorpus(ctx context.Context, fileIDs []int64, corpus *Corpus) ([]FolderSuggestion, error) {
 	minFiles := MinFilesForFolder
 	minSimilarity := 0.45

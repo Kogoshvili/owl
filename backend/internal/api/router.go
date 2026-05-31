@@ -46,7 +46,6 @@ func NewRouter(s *store.Store, sc *scanner.Scanner, ext *extractor.Extractor, cf
 	apiMux.HandleFunc("DELETE /suggestions/{id}/files/{fileId}", shh.RemoveFile)
 	apiMux.HandleFunc("POST /suggestions/{id}/materialize", shh.Materialize)
 
-	apiMux.HandleFunc("GET /intelligence/strategies", ih.ListStrategies)
 	apiMux.HandleFunc("GET /intelligence/folders/physical", ih.ListPhysicalFolders)
 	apiMux.HandleFunc("GET /intelligence/folders/physical/files", ih.ListPhysicalFolderFiles)
 	apiMux.HandleFunc("GET /intelligence/folders/physical/coherence", ih.AnalyzeFolderCoherence)

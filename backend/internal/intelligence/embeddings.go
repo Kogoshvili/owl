@@ -8,7 +8,6 @@ import (
 	"math"
 	"owl/internal/cluster"
 	"owl/internal/embedding"
-	"owl/internal/llm"
 	"owl/internal/store"
 	"owl/internal/vector"
 	"sort"
@@ -18,7 +17,6 @@ import (
 type EmbeddingsStrategy struct {
 	analyzer   *Analyzer
 	store      *store.Store
-	llm        *llm.Client
 	embeddings *embedding.Client
 }
 
@@ -28,18 +26,6 @@ func NewEmbeddingsStrategy(analyzer *Analyzer, store *store.Store, embedClient *
 		store:      store,
 		embeddings: embedClient,
 	}
-}
-
-func (s *EmbeddingsStrategy) ID() StrategyID      { return StrategyEmbeddings }
-func (s *EmbeddingsStrategy) DisplayName() string { return "Embeddings" }
-func (s *EmbeddingsStrategy) Description() string {
-	return "Semantic clustering using Ollama embeddings + DBSCAN. Understands content meaning, not just word matches."
-}
-func (s *EmbeddingsStrategy) Available() bool   { return s.embeddings != nil }
-func (s *EmbeddingsStrategy) SpeedHint() string { return "~20-40min for 12K files" }
-
-func (s *EmbeddingsStrategy) SuggestFolders(ctx context.Context, fileIDs []int64) ([]FolderSuggestion, error) {
-	return s.SuggestFoldersWithCorpus(ctx, fileIDs, nil)
 }
 
 func (s *EmbeddingsStrategy) SuggestFoldersWithCorpus(ctx context.Context, fileIDs []int64, corpus *Corpus) ([]FolderSuggestion, error) {
