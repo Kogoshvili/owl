@@ -100,42 +100,6 @@ func (h *IntelligenceHandler) ListPhysicalFolders(w http.ResponseWriter, r *http
 	writeJSON(w, http.StatusOK, tree)
 }
 
-func (h *IntelligenceHandler) ListPhysicalFolderFiles(w http.ResponseWriter, r *http.Request) {
-	path := r.URL.Query().Get("path")
-	if path == "" {
-		writeError(w, http.StatusBadRequest, "path is required")
-		return
-	}
-
-	files, err := h.store.GetFilesInDir(path)
-	if err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
-		return
-	}
-
-	writeJSON(w, http.StatusOK, map[string]any{
-		"path":  path,
-		"files": files,
-		"count": len(files),
-	})
-}
-
-func (h *IntelligenceHandler) AnalyzeFolderCoherence(w http.ResponseWriter, r *http.Request) {
-	path := r.URL.Query().Get("path")
-	if path == "" {
-		writeError(w, http.StatusBadRequest, "path is required")
-		return
-	}
-
-	result, err := intelligence.AnalyzeFolderCoherence(h.analyzer, h.store, path)
-	if err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
-		return
-	}
-
-	writeJSON(w, http.StatusOK, result)
-}
-
 func (h *IntelligenceHandler) ListFolderSuggestions(w http.ResponseWriter, r *http.Request) {
 	suggestions, err := h.store.ListSuggestions()
 	if err != nil {
@@ -1126,37 +1090,6 @@ func (h *IntelligenceHandler) refineSuggestionAsync(id int64) {
 			h.store.RemoveFileFromSuggestion(id, fileID)
 		}
 	}
-}
-
-func (h *IntelligenceHandler) GetUnprocessedCount(w http.ResponseWriter, r *http.Request) {
-	dirIDStr := r.URL.Query().Get("watched_dir_id")
-
-	var count int
-	var err error
-
-	if dirIDStr == "" {
-		err = h.store.Db().QueryRow(`
-			SELECT COUNT(*) FROM files
-			WHERE status = 'active' AND processing_status = 'unprocessed'
-		`).Scan(&count)
-	} else {
-		dirID, err := strconv.ParseInt(dirIDStr, 10, 64)
-		if err != nil {
-			writeError(w, http.StatusBadRequest, "invalid watched_dir_id")
-			return
-		}
-		err = h.store.Db().QueryRow(`
-			SELECT COUNT(*) FROM files
-			WHERE watched_dir_id = ? AND status = 'active' AND processing_status = 'unprocessed'
-		`, dirID).Scan(&count)
-	}
-
-	if err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
-		return
-	}
-
-	writeJSON(w, http.StatusOK, map[string]any{"count": count})
 }
 
 type processingStats struct {

@@ -56,24 +56,6 @@ func (s *Store) CreateWatchedDir(path string) (int64, error) {
 	return id, nil
 }
 
-func (s *Store) UpdateWatchedDir(id int64, enabled *bool) (int64, error) {
-	if enabled != nil {
-		res, err := s.db.Exec(`UPDATE watched_directories SET enabled = ? WHERE id = ?`, *enabled, id)
-		if err != nil {
-			return 0, err
-		}
-		n, err := res.RowsAffected()
-		if err != nil {
-			return 0, err
-		}
-		if n == 0 {
-			return 0, sql.ErrNoRows
-		}
-	}
-
-	return id, nil
-}
-
 func (s *Store) DeleteWatchedDirAndFiles(id int64) error {
 	var path string
 	err := s.db.QueryRow(`SELECT path FROM watched_directories WHERE id = ?`, id).Scan(&path)

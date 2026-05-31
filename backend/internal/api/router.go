@@ -23,22 +23,17 @@ func NewRouter(s *store.Store, sc *scanner.Scanner, ext *extractor.Extractor, cf
 
 	apiMux.HandleFunc("GET /watched-directories", wdh.List)
 	apiMux.HandleFunc("POST /watched-directories", wdh.Create)
-	apiMux.HandleFunc("PATCH /watched-directories/{id}", wdh.Update)
 	apiMux.HandleFunc("DELETE /watched-directories/{id}", wdh.Delete)
 	apiMux.HandleFunc("POST /watched-directories/{id}/scan", wdh.Scan)
-	apiMux.HandleFunc("POST /watched-directories/{id}/extract", wdh.Extract)
 
 	apiMux.HandleFunc("GET /files", fh.List)
 	apiMux.HandleFunc("GET /files/{id}", fh.Get)
 	apiMux.HandleFunc("GET /files/{id}/raw", fh.Raw)
-	apiMux.HandleFunc("GET /watched-directories/{id}/files", fh.ListByDir)
 	apiMux.HandleFunc("POST /files/{id}/extract", fh.Extract)
 
 	apiMux.HandleFunc("PUT /files/{id}/comment", ch.Upsert)
 	apiMux.HandleFunc("DELETE /files/{id}/comment", ch.Delete)
 
-	apiMux.HandleFunc("GET /suggestions", shh.List)
-	apiMux.HandleFunc("POST /suggestions", shh.Create)
 	apiMux.HandleFunc("GET /suggestions/{id}", shh.Get)
 	apiMux.HandleFunc("PATCH /suggestions/{id}", shh.Update)
 	apiMux.HandleFunc("DELETE /suggestions/{id}", shh.Delete)
@@ -47,15 +42,12 @@ func NewRouter(s *store.Store, sc *scanner.Scanner, ext *extractor.Extractor, cf
 	apiMux.HandleFunc("POST /suggestions/{id}/materialize", shh.Materialize)
 
 	apiMux.HandleFunc("GET /intelligence/folders/physical", ih.ListPhysicalFolders)
-	apiMux.HandleFunc("GET /intelligence/folders/physical/files", ih.ListPhysicalFolderFiles)
-	apiMux.HandleFunc("GET /intelligence/folders/physical/coherence", ih.AnalyzeFolderCoherence)
 	apiMux.HandleFunc("GET /intelligence/folders/suggestions", ih.ListFolderSuggestions)
 	apiMux.HandleFunc("POST /intelligence/folders/suggestions", ih.GenerateSuggestions)
 	apiMux.HandleFunc("DELETE /intelligence/folders/suggestions/{id}", ih.DismissFolderSuggestion)
 	apiMux.HandleFunc("POST /intelligence/folders/suggestions/refine-all", ih.RefineAllSuggestions)
 	apiMux.HandleFunc("GET /intelligence/folders/suggestions/status", ih.GetGenerationStatus)
 	apiMux.HandleFunc("POST /intelligence/refine/folder/{id}", ih.RefineFolder)
-	apiMux.HandleFunc("GET /intelligence/files/unprocessed/count", ih.GetUnprocessedCount)
 	apiMux.HandleFunc("GET /intelligence/files/processing-stats", ih.GetProcessingStats)
 	apiMux.HandleFunc("GET /intelligence/folders/guards", ih.ListFolderGuards)
 	apiMux.HandleFunc("PUT /intelligence/folders/guards", ih.SetFolderGuard)

@@ -2,9 +2,7 @@ package handler
 
 import (
 	"context"
-	"database/sql"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -15,11 +13,10 @@ import (
 )
 
 type WatchedDirHandler struct {
-	store          *store.Store
-	scanner        *scanner.Scanner
-	extractor      *extractor.Extractor
-	scanTracker    opTracker
-	extractTracker opTracker
+	store       *store.Store
+	scanner     *scanner.Scanner
+	extractor   *extractor.Extractor
+	scanTracker opTracker
 }
 
 func NewWatchedDirHandler(s *store.Store, sc *scanner.Scanner, ext *extractor.Extractor) *WatchedDirHandler {
@@ -28,10 +25,6 @@ func NewWatchedDirHandler(s *store.Store, sc *scanner.Scanner, ext *extractor.Ex
 
 type createWatchedDirRequest struct {
 	Path string `json:"path"`
-}
-
-type updateWatchedDirRequest struct {
-	Enabled *bool `json:"enabled"`
 }
 
 func (h *WatchedDirHandler) List(w http.ResponseWriter, r *http.Request) {
@@ -66,30 +59,6 @@ func (h *WatchedDirHandler) Create(w http.ResponseWriter, r *http.Request) {
 	go scan(h, req.Path, id)
 
 	writeJSON(w, http.StatusCreated, map[string]any{"id": id})
-}
-
-func (h *WatchedDirHandler) Update(w http.ResponseWriter, r *http.Request) {
-	id, ok := parsePathID(w, r, "id")
-	if !ok {
-		return
-	}
-
-	var req updateWatchedDirRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid request body")
-		return
-	}
-
-	id, err := h.store.UpdateWatchedDir(id, req.Enabled)
-	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			writeError(w, http.StatusNotFound, "watched directory not found")
-			return
-		}
-		writeError(w, http.StatusInternalServerError, err.Error())
-		return
-	}
-	writeJSON(w, http.StatusOK, map[string]any{"id": id})
 }
 
 func (h *WatchedDirHandler) Delete(w http.ResponseWriter, r *http.Request) {
@@ -133,35 +102,6 @@ func (h *WatchedDirHandler) GetScanStatus(w http.ResponseWriter, r *http.Request
 		return
 	}
 	writeJSON(w, http.StatusOK, status)
-}
-
-func (h *WatchedDirHandler) Extract(w http.ResponseWriter, r *http.Request) {
-	id, ok := parsePathID(w, r, "id")
-	if !ok {
-		return
-	}
-
-	dir, err := h.store.GetWatchedDir(id)
-	if err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
-		return
-	}
-	if dir == nil {
-		writeError(w, http.StatusNotFound, "watched directory not found")
-		return
-	}
-
-	queued, err := h.store.QueueFilesForExtraction(id)
-	if err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
-		return
-	}
-
-	if queued > 0 {
-		go runExtraction(h.extractor, &h.extractTracker)
-	}
-
-	writeJSON(w, http.StatusAccepted, map[string]int64{"queued": queued})
 }
 
 func scan(h *WatchedDirHandler, path string, id int64) {

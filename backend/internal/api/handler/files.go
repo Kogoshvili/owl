@@ -141,68 +141,6 @@ func (h *FileHandler) Raw(w http.ResponseWriter, r *http.Request) {
 	http.ServeFile(w, r, file.Path)
 }
 
-func (h *FileHandler) ListByDir(w http.ResponseWriter, r *http.Request) {
-	id, ok := parsePathID(w, r, "id")
-	if !ok {
-		return
-	}
-
-	f := store.FileFilter{Limit: 50}
-	f.WatchedDirID = &id
-
-	if v := r.URL.Query().Get("extension"); v != "" {
-		f.Extension = &v
-	}
-	if v := r.URL.Query().Get("status"); v != "" {
-		f.Status = &v
-	}
-	if v := r.URL.Query().Get("processing_status"); v != "" {
-		f.ProcessingStatus = &v
-	}
-	if v := r.URL.Query().Get("supported"); v != "" {
-		b := v == "true"
-		f.Supported = &b
-	}
-	if v := r.URL.Query().Get("sort"); v != "" {
-		f.SortBy = v
-	}
-	if v := r.URL.Query().Get("order"); v != "" {
-		f.SortOrder = v
-	}
-	if v := r.URL.Query().Get("limit"); v != "" {
-		if n, err := strconv.Atoi(v); err == nil && n > 0 {
-			f.Limit = n
-		}
-	}
-	if v := r.URL.Query().Get("offset"); v != "" {
-		if n, err := strconv.Atoi(v); err == nil && n > 0 {
-			f.Offset = n
-		}
-	}
-
-	total, err := h.store.CountFiles(f)
-	if err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
-		return
-	}
-
-	files, err := h.store.ListFiles(f)
-	if err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
-		return
-	}
-	if files == nil {
-		files = []store.File{}
-	}
-
-	writeJSON(w, http.StatusOK, map[string]any{
-		"files":  addProcessable(files),
-		"total":  total,
-		"limit":  f.Limit,
-		"offset": f.Offset,
-	})
-}
-
 func (h *FileHandler) Extract(w http.ResponseWriter, r *http.Request) {
 	id, ok := parsePathID(w, r, "id")
 	if !ok {

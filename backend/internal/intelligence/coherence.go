@@ -1,11 +1,5 @@
 package intelligence
 
-import (
-	"fmt"
-	"log/slog"
-	"owl/internal/store"
-)
-
 type FolderCoherence struct {
 	Path          string  `json:"path"`
 	FileCount     int     `json:"file_count"`
@@ -98,93 +92,4 @@ func AnalyzeFolderCoherenceWithCorpus(corpus *Corpus, folderFileIDs []int64, fil
 	}, nil
 }
 
-func AnalyzeFolderCoherence(analyzer *Analyzer, st *store.Store, folderPath string) (*FolderCoherence, error) {
-	files, err := st.GetFilesInDir(folderPath)
-	if err != nil {
-		return nil, fmt.Errorf("coherence: get files: %w", err)
-	}
 
-	if len(files) < 2 {
-		return &FolderCoherence{
-			Path:          folderPath,
-			FileCount:     len(files),
-			AvgSimilarity: 1.0,
-			IsCoherent:    true,
-		}, nil
-	}
-
-	fileIDs := make([]int64, len(files))
-	for i, f := range files {
-		fileIDs[i] = f.ID
-	}
-
-	corpusKeywords, err := analyzer.BuildCorpusTFIDFWithFallback(fileIDs)
-	if err != nil {
-		return nil, fmt.Errorf("coherence: build corpus: %w", err)
-	}
-
-	keywordMaps := make(map[int64]map[string]float64)
-	for _, id := range fileIDs {
-		kwMap := make(map[string]float64)
-		for _, kw := range corpusKeywords[id] {
-			kwMap[kw.Term] = kw.Score
-		}
-		keywordMaps[id] = kwMap
-	}
-
-	var totalSim float64
-	var pairCount int
-
-	fileAvgSim := make(map[int64]float64)
-	filePairCount := make(map[int64]int)
-
-	for i, id1 := range fileIDs {
-		for _, id2 := range fileIDs[i+1:] {
-			sim := cosineSimilarityMaps(keywordMaps[id1], keywordMaps[id2])
-			totalSim += sim
-			pairCount++
-
-			fileAvgSim[id1] += sim
-			filePairCount[id1]++
-			fileAvgSim[id2] += sim
-			filePairCount[id2]++
-		}
-	}
-
-	var avgSim float64
-	if pairCount > 0 {
-		avgSim = totalSim / float64(pairCount)
-	}
-
-	for id := range fileAvgSim {
-		if filePairCount[id] > 0 {
-			fileAvgSim[id] /= float64(filePairCount[id])
-		}
-	}
-
-	isCoherent := avgSim >= coherenceThreshold
-
-	var outliers []OutlierFile
-	if !isCoherent {
-		for _, f := range files {
-			avg := fileAvgSim[f.ID]
-			if avg < coherenceThreshold {
-				outliers = append(outliers, OutlierFile{
-					ID:         f.ID,
-					Name:       f.Name,
-					Similarity: avg,
-				})
-			}
-		}
-	}
-
-	slog.Info("coherence: analyzed folder", "path", folderPath, "files", len(files), "avg_sim", fmt.Sprintf("%.3f", avgSim), "coherent", isCoherent, "outliers", len(outliers))
-
-	return &FolderCoherence{
-		Path:          folderPath,
-		FileCount:     len(files),
-		AvgSimilarity: avgSim,
-		IsCoherent:    isCoherent,
-		OutlierFiles:  outliers,
-	}, nil
-}

@@ -279,21 +279,6 @@ func (s *Store) SetScanned(paths []string) error {
 	return tx.Commit()
 }
 
-func (s *Store) QueueFilesForExtraction(dirID int64) (int64, error) {
-	result, err := s.db.Exec(
-		`UPDATE files SET processing_status = 'queued', processing_error = NULL WHERE watched_dir_id = ? AND processing_status IN ('unprocessed', 'stale', 'failed') AND LOWER(extension) IN `+SupportedExtsSQL,
-		dirID,
-	)
-	if err != nil {
-		return 0, err
-	}
-	n, _ := result.RowsAffected()
-	if n > 0 {
-		slog.Info("queued files for extraction", "dir_id", dirID, "count", n)
-	}
-	return n, nil
-}
-
 func (s *Store) QueueFileForExtraction(fileID int64) error {
 	result, err := s.db.Exec(
 		`UPDATE files SET processing_status = 'queued', processing_error = NULL WHERE id = ? AND processing_status IN ('unprocessed', 'stale', 'failed') AND LOWER(extension) IN `+SupportedExtsSQL,
