@@ -193,11 +193,6 @@ func (s *Store) CreateFile(f *File) (*File, error) {
 	return s.GetFile(id)
 }
 
-func (s *Store) UpdateFileStatus(id int64, status string) error {
-	_, err := s.db.Exec(`UPDATE files SET status = ? WHERE id = ?`, status, id)
-	return err
-}
-
 func (s *Store) UpsertFile(f *File) (*File, error) {
 	existing, err := s.GetFileByPath(f.Path)
 	if err != nil {
@@ -379,24 +374,6 @@ func (s *Store) UpsertFileFTS(fileID int64, name, extension, content string) err
 	}
 
 	return tx.Commit()
-}
-
-func (s *Store) ListExtensions() ([]string, error) {
-	rows, err := s.db.Query(`SELECT DISTINCT extension FROM files WHERE extension != '' ORDER BY extension`)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	var exts []string
-	for rows.Next() {
-		var e string
-		if err := rows.Scan(&e); err != nil {
-			return nil, err
-		}
-		exts = append(exts, e)
-	}
-	return exts, rows.Err()
 }
 
 

@@ -109,8 +109,6 @@ func (m *Manager) Status() Status {
 	return m.status
 }
 
-func (m *Manager) Model() string { return m.model }
-
 func (m *Manager) BaseURL() string { return "http://" + m.host }
 
 // IsAlreadyRunning checks if an Ollama instance is already available.

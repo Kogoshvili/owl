@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"log/slog"
 	"net/http"
 	"time"
 )
@@ -82,25 +81,6 @@ func (c *Client) Embed(ctx context.Context, texts []string) ([][]float32, error)
 	}
 
 	return result.Embeddings, nil
-}
-
-func (c *Client) IsAvailable(ctx context.Context) bool {
-	checkCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
-	defer cancel()
-
-	req, err := http.NewRequestWithContext(checkCtx, http.MethodGet, c.baseURL+"/api/tags", nil)
-	if err != nil {
-		return false
-	}
-
-	resp, err := c.httpClient.Do(req)
-	if err != nil {
-		slog.Debug("embedding: server not available", "error", err)
-		return false
-	}
-	defer resp.Body.Close()
-
-	return resp.StatusCode == http.StatusOK
 }
 
 func (c *Client) Model() string {

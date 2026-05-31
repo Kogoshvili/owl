@@ -299,34 +299,6 @@ func (a *Analyzer) BuildCorpusTFIDFWithFallback(fileIDs []int64) (map[int64][]Ke
 	return result, nil
 }
 
-func (a *Analyzer) GetProcessedFiles(limit int) ([]int64, error) {
-	if limit <= 0 {
-		limit = 1000
-	}
-
-	rows, err := a.db.Query(`
-		SELECT id FROM files 
-		WHERE processing_status = 'processed' 
-		ORDER BY id 
-		LIMIT ?
-	`, limit)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	var fileIDs []int64
-	for rows.Next() {
-		var id int64
-		if err := rows.Scan(&id); err != nil {
-			return nil, err
-		}
-		fileIDs = append(fileIDs, id)
-	}
-
-	return fileIDs, rows.Err()
-}
-
 func (a *Analyzer) GetFileNames(fileIDs []int64) (map[int64]string, error) {
 	if len(fileIDs) == 0 {
 		return make(map[int64]string), nil
